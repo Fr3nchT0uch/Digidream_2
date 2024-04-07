@@ -1,12 +1,13 @@
 ; ACME 0.96.4
 ; 
-; [binary MAX Size: (16+16+12)*256 = 11264 bytes]
+; [binary MAX Size: $D000-$FBFF = (16+16+12)*256 = 11264 bytes]
 ;
 ; DIGIDREAM 2: SID VOICE EDITION
 ; [FRENCH TOUCH]
 ; GROUiK
 ; 04/2024
 ;
+; v0.02 - DGR window "enough stable" added / some bugs fixed / some comments added/corrected
 ; v0.01 - first commit (files mainly from first tests)
 ;
 !cpu 6502
@@ -144,7 +145,7 @@ MAIN
                 ; decomp MUSIC (-> $1000 Aux)
                 STA $C005                   ; RAMWRTON: write AUX memory from $200-$BFFF
                                             ; read MAIN
-                LDA #<($1000+11)    		; (+16 => skip LZ4 header)
+                LDA #<($1000+11)    		; (+11 => skip LZ4 header)
                 STA src2
                 LDA #>($1000+11)
                 STA src2+1
@@ -154,9 +155,20 @@ MAIN
                 STA dest+1
                 JSR DECOMPLZ4
 
+                ; Clear PAGE1 DLORES / FILL PAGE1 HIRES (TEST ONLY)
+                ; AUX
+                LDX #$04
+                LDA #$04                        
+.mod0           STA $400,Y
+                INY
+                BNE .mod0
+                INC .mod0+2
+                DEX
+                BNE .mod0
+
                 STA $C004                   ; WRITE MAIN again
                 
-                ; Clear PAGE1 LORES / FILL PAGE1 HIRES (TEST ONLY)
+                
                 LDX #$20
                 LDA #$FF
                 LDY #$00
@@ -167,11 +179,11 @@ MAIN
                 DEX
                 BNE .mod1
 
-                BIT $C057                   ; HIRES
                 BIT $C050                   ; mode GFX
 
+                ; MAIN
                 LDX #$04
-                TYA                         ; = 0
+                LDA #$01                    
 .mod2           STA $400,Y
                 INY
                 BNE .mod2
@@ -223,32 +235,71 @@ Init_INT    	; init interrupt
             	SEI                 		        ; inhib
             	; Set INT
             	LDA #%01000000      		        ; 
-            	STA $C40B           		        ; Auxiliary Control Register 6522-1 [T1/6522-1 Continuous Interrupt (FREE MODE) / PB7 disabled / T2 One Shot]
+            	STA $C40B           		        ; Auxiliary Control Register 6522-1 [T1/6522-1 Continuous Interrupt (FREE MODE) / PB7 disabled / T2 One Shot Mode]
+                STA $C48B
             	LDA #%11000000      		        ; 
-            	STA $C40E           		        ; Interrupt Enable Register 6522-1 [T1/6522-1 Enable Timer 1 INT for 6522-1 / Timer 2 INT Disabled]
+            	STA $C40E           		        ; Interrupt Enable Register [6522-1 Enable Timer 1 INT / Timer 2 INT Disabled]
+                STA $C48E                           ; Interrupt Enable Register [6522-2 Enable Timer 1 INT / Timer 2 INT Disabled]
                 
-                ; set first INTERRUPT
-                LDA <INIT_DELAY
-                STA $C404
-                LDA >INIT_DELAY
-                STA $C405
-                CLI  
-; ===================================================                   		
-            	; 50Hz PAL Delay 
-            	; (re)fill registers for TIMER 2 (no INT here) - T2/6522-1  
-LOOPb           LDX #$36                                                        
+                ; wait for DISPLAY
+-           	LDA VERTBLANK
+            	BMI -        
+-           	LDA VERTBLANK
+            	BPL -                       		; wait until next DISPLAY on
+
+                ; here "beginning" of DISPLAY (no need to be more precise)
+                LDY #64
+                JSR WAIT65                          ; wait 64 lines (first part of HGR)
+
+                ; set 6522-2/T1 - sync code for beginning DGR window
+                LDX #$36                                                        
+            	LDY #$4F                            ; one full PAL frame (20280-2)                                                                  
+            	STX $C484                   		; T2C_1-Lower                    
+            	STY $C485                   		; T2C_1-High  (+reset interrupt flag)
+
+                LDY #64
+                JSR WAIT65                          ; wait 64 lines (DGR window "height")
+
+                ; init MAIN TIMER: PLAYER PYM (T2/6522-1)
+                ; 50Hz PAL Delay : 20280-2 = 20278
+                LDX #$36                                                        
             	LDY #$4F                                                                   
             	STX $C408                   		; T2C_1-Lower                    
             	STY $C409                   		; T2C_1-High  (+reset interrupt flag)                      
-
+                
+                ; set 6522-1/T1 first INTERRUPT (initial SID VOICE TIMER - value not really matter here)
+                INT1_INIT_DELAY = 700               
+                LDA #<INT1_INIT_DELAY
+                STA $C404
+                LDA #>INT1_INIT_DELAY
+                STA $C405
+                
+                CLI  
+; =================================================== 
+                ; MAIN LOOP  
+M_LOOP           
     		    LDA #%00100000 
 LOOP        	BIT $C40D                  
-            	BEQ LOOP                    		; test IFR bit5 -> T2 timer reach 0 (T2/6522-1)
-
+            	BEQ LOOP                    		; test IFR bit5 -> T2 timer reaches 0 (T2/6522-1)              		
+            	
+            	; (re)fill registers for TIMER 2 (no INT here) - T2/6522-1  
+                SEI                                 ; disable INT to "stabilize" DGR window
+                LDA #($36-13)                       ; 13 = empirical value!
+                CLC                                 ; compute new delay value (minus cycles already passed)
+                ADC $C408                           ; negative value here (counter = $FFXX)
+                STA $C408
+                LDA #$4F
+                ADC $C409         
+            	STA $C409                   		; write T2C_1-High          
+            
+                BIT $C057                           ; HGR (again)
+                STA $C00C                           ; 80 col OFF
+                CLI                                 ; enable INT after switch to HGR again
+                
                 ; test keyboard to toogle SID/Channels
                 LDA $C000
                 BPL .next
-                CMP #$A0                ; test SPACE key to toogle sid off/on
+                CMP #$A0                            ; test SPACE key to toogle sid off/on
                 STA $C010
                 BNE .next
                 LDA sidOff
@@ -261,19 +312,20 @@ LOOP        	BIT $C40D
             	INC Tick                    		; inc frame counter                                             
             	BNE +                                                                               
             	INC Tick+1                                                                  
-+           	LDA Tick+1
++           	LDA Tick+1                  
             	CMP #>FRAMEMAX
                 BEQ + 
-            	JMP LOOPb
+            	JMP M_LOOP
 +            	LDA Tick
-            	CMP #<FRAMEMAX
+            	CMP #<FRAMEMAX                      
             	BEQ +
-                JMP LOOPb
+                JMP M_LOOP
 +
-                ; END
+                ; END                               ; TODO: LOOP SONG
                 SEI
-                LDA #%01100000      		        ; stop INT (T1/T2/6522-1)
-            	STA $C40E           		        ; VIA_IER/1
+                LDA #%01100000      		        ; stop INT (T1/T2/6522-1/2)
+            	STA $C40E           		        ; IER
+                STA $C48E                           ; 
             	; clean REGISTERS AY1
             	LDA #$00
             	STA AY_ADDR
@@ -284,10 +336,26 @@ LOOP        	BIT $C40D
 ; =================================================================================================
 INT_ROUT 
 !zone                    
-                STA saveA           
-            	STX saveX          
+                STA saveA      
+            	STX saveX     
             	STY saveY
 
+                ; check if 6522-1/T1 INT (sid voice)
+        	    BIT $C40D                           ; bit6 IFR -> V - if set, Timer1 = 0 so int occured      
+                BVS .int_sid   
+                
+                ; else 6522-2/T1
+.int_sync       STA $C00D		                    ; 80 colonnes
+		        STA $C05E		                    ; SETAN3
+                BIT $C056                           ; (D)GR
+                
+                BIT $C484                           ; reset IFR (6522-2)
+                LDA saveA
+            	LDX saveX
+            	LDY saveY
+                RTI
+
+.int_sid        ; 6522-1/T1 INT occured / SID VOICE effect
                 LDA bSidOff
                 BNE ++
 
@@ -307,13 +375,12 @@ INT_ROUT
 		        STA AY_ADDR		                    ; ORB1 (fct) 
 		        STX AY_ADDR		                    ; Set fct "Inactive" / ORB1 (fct)
 
-+
-            	LDA valV
++            	LDA valV
             	EOR valEOR                          ; 0 <-> vol SID VOICE
             	STA valV
 
 ++            	BIT $C404           		        ; IFR b6 cleared by read T1C_1-Lower (T1/6522-1)
-            	LDA saveA
+                LDA saveA
             	LDX saveX
             	LDY saveY
 
@@ -322,7 +389,7 @@ mod_RTI         RTI                                 ; RTI/NOP ($40/$EA)
                 ; SET SID VOICE INT
                 ; ------------------
                 ; set new TIMER delay (T1/6522-1) for SID-VOICES	
-        		LDX intL
+.setsidInt      LDX intL
                 LDY intH
                 STX $C404      	                 	; T1C_1-Lower       	
         		STY $C405                        	; T1C_1-High   => countdown from now! / IFR b6 cleared
@@ -538,7 +605,7 @@ mod_comp_intH   CPY #00                             ; compare to last int delay 
 		        LDA #$0D				
 		        STA AY_ADDR+1        		; reg#				
 		        LDA #$07			        ; Set fct "Set PSG Reg #"
-		        STA AY_ADDR		            ; ORB1 (fct)			        ; 
+		        STA AY_ADDR		            ; ORB1 (fct)			 
 		        STX AY_ADDR		            ; Set fct "Inactive" / ORB1 (fct)
 
 		        TYA			                ; restore value to write
@@ -547,7 +614,7 @@ mod_comp_intH   CPY #00                             ; compare to last int delay 
 		        STA AY_ADDR		            ; ORB1 (fct)
 		        STX AY_ADDR        		    ; Set fct "Inactive" / ORB1 (fct)
 +               
-                CLI                                 ; allow INT again!
+                CLI                         ; allow INT again!
 
                 ; get value registers for next frame 
                 DEC nREG0
@@ -1002,7 +1069,53 @@ modDECOMP
 					BEQ 	.s5
 					RTS					
 .s5					INC 	src2+1			
-					RTS    
+					RTS
+; =================================================================================================
+!align 255,0
+WAIT65              ; = attend Y * 65 cycles exactement (JSR/RTS compris -> APPEL EN 8 cycles obligatoire -> LDY #xx / JSR WAIT65)
+WAIT65ZP = * + 1    ; = attend Y * 65 cycles exactement (JSR/RTS compris -> APPEL EN 9 cycles obligatoire -> LDY ZP / JSR WAIT65Z)
+!zone           
+		    LDA $EA     ; 3 (dummy)  -> on arrive sur NOP si JSR WAIT65Z
+WAIT62      ; = attend 1*62 cycles exactement (JSR/RTS compris -> LDY #01 / JSR WAIT63)
+            DEY			; 2					
+		    BEQ .S1	    ; 3/2			
+                  
+.WL1 	    LDX #$0B				            
+.WL2 	    DEX							
+		    BNE .WL2	; 2 + (2+3)*10 + 2 + 2 = 56															
+                      
+		    NOP			; 2					
+		    NOP			; 2					
+		    DEY			; 2					
+		    BNE .WL1	; (56+2+2+2+3)*(Y-2) + 56 + 2 + 2 + 2 + 2 = 65*Y - 2*65 + 64 = 65*Y - 66				
+
+WAIT59      ; = attend 1*59 cycles exactement (JSR/RTS compris -> LDY #xx / JSR WAIT59)											                      
+		    LDX #$08					
+.WL3 	    DEX							
+		    BNE .WL3	; 2 + (2+3)*7 + 2 + 2 = 41					
+                							
+		    NOP			; 2					
+		    NOP			; 2					
+		    RTS			; 6
+
+                        ; WAIT62 = 2 + 2 + (65-66) + 41 + 2 + 2 + 6 + (8) = 62 
+                        ; WAIT65 = 3 + 2 + 2 + (65*Y-66) + 41 + 2 + 2 + 6 + (8) = 65*Y
+                        ; WAIT59 = 41 + 2 + 2 + 6 + (8) = 59 					
+
+WAIT57      ; = attend 1*57 cycles exactement (JSR/RTS compris -> LDY #xx / JSR WAIT57)											         
+.S1	 	    NOP         ; 2
+WAIT55      ; = attend 1*55 cycles exactement (JSR/RTS compris -> LDY #xx / JSR WAIT55)	
+            LDX #08					
+                      
+.WL4 	    DEX							
+		    BNE .WL4    ; 2 + (2+3)*7 + 2 + 2 = 41					
+		    RTS         ; 6
+                        ; = 49
+
+                        ; WAIT65 = 3 + 2 + 3 + 49 + (8) = 65
+                        ; WAIT62 = 2 + 3 + 49 + (8) = 62
+                        ; WAIT57 = 49 + (8) = 57
+                        ; WAIT55 = 47 + (8) = 55   
 ; =================================================================================================
 AY_ADDR         = $C400        ; AY1 = $C400 / AY2 = $C480 (MB SLOT#4)
 
@@ -1010,8 +1123,6 @@ PATTERNSIZE     = 64
 
 NBPATTERNS      = 269          
 FRAMEMAX        = 17153
-
-INIT_DELAY      = 900
 
 D_REG0 = $1000
 D_REG1 = $32F8

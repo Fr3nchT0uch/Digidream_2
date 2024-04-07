@@ -1,10 +1,10 @@
 ; ACME 0.96.4
 ; 
 ;
-; v 0.02 - BUG with INT/REBOOT fixed (see comment in code)
+; v 0.02 - issue with INT not reset by REBOOT fixed (see comment in code)
 ;
 !cpu 6502
-!convtab "a2txti.bin"    ; incorporation table caractère APPLE II (normal) générale
+!convtab "a2txt.bin"    ; incorporation table caractère APPLE II (normal) générale
 
 !sl "lbl_boot.txt"
 
@@ -66,16 +66,17 @@ INIT	    JSR $FC58			        ; HOME (ROM)
 		    LDA #$FF
         	STA $C403       		    ; activate MB 4c (IIc)
         	STA $C404
-            ; *** added to prevent bug during fload if Reboot with CTRL-OA-RESET during INT active 
-            ; => first CLI encountered re-enable previous INT from before the reboot!!!*
-            LDA #%01100000      		; disable all INT (T1/T2/6522-1)   
+            ; *** added to prevent issue during fload if Reboot with CTRL-OA-RESET during INT active (INT not reset)
+            ; => first CLI encountered during fload re-enable previous INT
+            LDA #%01100000      		; disable all INT (T1/T2/6522-1/2)   
             STA $C40E           		; VIA_IER/1                    
-            ; STA $C48E                 ; *** IF INT from AY2 is used, uncomment this line too ***
+            STA $C48E                   ; VIA_IER/2
+            ; ***
 		
 		    ; Text
 		    LDX #39
 -		    LDA TEXT,X
-		    STA $400,X
+		    STA $5A8,X
 		    DEX
 		    BPL -
 		    ; jingle / Tribute to 'Déplombage Mode d'Emploi' / Godfather (code from DPME III)
@@ -114,6 +115,6 @@ MODJING		LDA #$07
 ; =================================================================================================
 ;                  0000000000000000111111111111111122222222
 ;                  0123456789ABCDEF0123456789ABCDEF01234567
-;                       *                            *       
-TEXT 		!text ":        PLAYER SID-VOICES (FT)        :",00
+;                       ****                      ****       
+TEXT 		!text "          FRENCH TOUCH PRESENT          ",00
 EO_BOOT
