@@ -116,5 +116,5 @@ MODJING		LDA #$07
 ;                  0000000000000000111111111111111122222222
 ;                  0123456789ABCDEF0123456789ABCDEF01234567
 ;                       ****                      ****       
-TEXT 		!text "          FRENCH TOUCH PRESENT          ",00
+TEXT 		!text "         FRENCH TOUCH   PRESENT         ",00
 EO_BOOT

@@ -2,7 +2,10 @@
 # boot0:    	T00/S00			$0800	    MAIN
 # FLOAD:		T00/S01-T00/S0x $FC00	   RAMCARD
 # MAIN:  		T01/S00-T01/Sxx	$D000	   RAMCARD		
-# MUSIC:		T02/S00-T02/SXX	$1000	     MAIN     *   -> $1000 (AUX)
+# MUSIC:		T02/S00-T04/SXX	$1000	    MAIN      *   -> $1000 (AUX)
+# HGR			T05/S00-T06/S31 $2000		MAIN
+# DGR			T07/S00-T07/S31 $800		M/A
+# EFFECT		T08/S00-TXX/SXX $6000		MAIN
 
 ### TOOLS
 PYTHON3 = C:\Python3\python.exe
@@ -34,7 +37,7 @@ DISK = test.woz
 all: $(DISK)
 
 
-$(DISK): floadc.b BOOT main.b
+$(DISK): floadc.b BOOT main.b effect.b
 
 	$(GENWOZ)  -t "0 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1"
 
@@ -45,8 +48,16 @@ $(DISK): floadc.b BOOT main.b
 	$(W2W) s p 0 1 $(DISK) floadc.b
 # main.b 		T1 S0 	> $D000 (LC)
 	$(W2W) c p 1 0 $(DISK) main.b
-# music		T2 S0	> $1000 (M) * >> $1000 (A)
+# music			T2 S0	> $1000 (M) * >> $1000 (A)
 	$(W2W) c p 2 0 $(DISK) music\ZIC.lz4
+# HGR			T5 S0	> $2000
+	$(W2W) c p 5 0 $(DISK) hgr\PI.STEP10
+# DGR			T7 S0 	> $800M | T7 S16 > $800A
+	$(W2W) c p 7 0 $(DISK) dgr\1.main
+	$(W2W) c p 7 16 $(DISK) dgr\1.aux
+# EFFECT		T8 S0	> $6000
+	$(W2W) c p 8 0 $(DISK) effect.b
+
 
 # launching EMULATOR / copy SYM file for AW
 	copy lbl_main.txt $(APPLEWINPATH)\A2_USER1.SYM
@@ -61,6 +72,8 @@ floadc.b: floadc.a
 main.b: main.a floadc.a
 	$(ACME) main.b main.a
 
+effect.b: effect.a main.a
+	$(ACME) effect.b effect.a
 
 clean:
 	del *.b
