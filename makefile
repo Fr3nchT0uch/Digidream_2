@@ -37,7 +37,7 @@ DISK = test.woz
 all: $(DISK)
 
 
-$(DISK): floadc.b BOOT main.b effect.b
+$(DISK): floadc.b BOOT effect.b main.b
 
 	$(GENWOZ)  -t "0 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1"
 
@@ -69,11 +69,12 @@ BOOT:
 floadc.b: floadc.a
 	$(ACME) floadc.b floadc.a
 
-main.b: main.a floadc.a
+effect.b: effect.a
+	$(ACME) effect.b effect.a
+
+main.b: main.a floadc.a effect.a
 	$(ACME) main.b main.a
 
-effect.b: effect.a main.a
-	$(ACME) effect.b effect.a
 
 clean:
 	del *.b
