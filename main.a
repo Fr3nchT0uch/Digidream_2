@@ -7,6 +7,7 @@
 ; GROUiK
 ; 04/2024
 ;
+; v0.05 - Intro Effect added / various improvements / timeline added
 ; v0.04 - Other DGR Effects added / Credits page displayed
 ; v0.03 - DGR Effect added (some tests for now) / DGR "intro" screen (WIP)
 ; v0.02 - DGR window "enough stable" added / some bugs fixed / some comments added/corrected
@@ -125,15 +126,19 @@ bSidOff         = $A7                       ; bolean if SID-VOICES on this tick!
 valEOR          = $A8
 
 ; effects
-indexTEX		= $A9
+indexTEX		= $A9                       ; TODO: group variables not used at the same time
 count		    = $AA
 indexLAYER1	    = $AB
 countLAYER1	    = $AC
 indexLAYER2	    = $AD
 countLAYER2	    = $AE
+indexIntro      = $AF
+saveIntro       = $B0
+countIntro      = $B1
 
 ; track timing
-indexTTrack     = $AF
+indexTTrack     = $B2
+
 ; WARNING: do not reach $CC
 ; =================================================================================================
 MAIN
@@ -276,6 +281,9 @@ Init_MB     	; init Mockingboard (SLOT#4)
                 LDA #01
                 STA bSidOff                         ; =1 for initial INT
             	LDA #00
+                STA countIntro
+                STA saveIntro
+                STA indexIntro
                 STA indexTTrack
                 STA indexTEX
                 STA count
@@ -376,7 +384,7 @@ modGFX_1        BIT $C056                           ; GR / HGR (again)
                 STA sidOff
 
 .next           
-modJSR_PART     JSR INTRO 
+modJSR_PART     JSR EMPTY
             	
                 ; play one tick
             	JSR PLAYER_PYM
@@ -408,25 +416,48 @@ modJSR_PREPA    JSR $FFFF
 ; =================================================================================================
 ; PARTS as subroutines
 ; =================================================================================================
-END
+LOOP_SONG
 !zone
-                ; END                               ; TODO: LOOP SONG
-                SEI
-                LDA #%01100000      		        ; stop INT (T1/T2/6522-1/2)
-            	STA $C40E           		        ; IER
-                STA $C48E                           ; 
-            	; clean REGISTERS AY1
-            	LDA #$00
-            	STA AY_ADDR
-            	LDA #$04
-            	STA AY_ADDR
-                CLI
-.end            JMP .end
-; -------------------------------------------------------------------------------------------------
-INTRO           ; empty
-!zone
+                LDA #PATTERNSIZE
+            	STA count1Pat
+            	LDX #00
+                STX indexPat
+            	JSR INIT_PATTERN                    ; init music data with initial parameters
                 RTS
 ; -------------------------------------------------------------------------------------------------
+INTRO           ; AUX Color [0x00,0x08,0x01,0x09,0x02,0x0A,0x03,0x0B,0x04,0x0C,0x05,0x0D,0x06,0x0E,0x07,0x0F]
+!zone           ;              00   01   02   03   04   05   06   07   08   09   0A   0B   0C   0D   0E   0F
+                INC countIntro
+                LDA countIntro
+                CMP #5
+                BNE .quit
+                LDA #00
+                STA countIntro
+                ; restore old bar
+                LDX saveIntro                       ; old BAR#
+                LDY #$AA
+                LDA #$55
+                STA $C002                           ; READ MAIN
+                JSR EFFECT_INTRO
+                STA $C003                           ; READ AUX
+                ; color new bar
+                LDY indexIntro
+                LDX TableIntro,Y
+                STX saveIntro                       ; save for next restoring
+                LDY #$EE
+                LDA #$DD
+                STA $C002                           ; READ MAIN
+                JSR EFFECT_INTRO
+                STA $C003                           ; READ AUX
+                LDY indexIntro
+                INY                                 
+                CPY #10
+                BNE +
+                LDY #00
++               STY indexIntro
+.quit           RTS
+; -------------------------------------------------------------------------------------------------
+EMPTY
 CREDITS         ; empty
 !zone
                 RTS
@@ -557,28 +588,6 @@ PARALLAX                                            ; TODO reunit EFF_F/EFF_T/PA
 		        LDX #00
 +		        STX indexTEX                
 ++              RTS
-; ------------------------------------------------------------------------------------------------
-PREPA_SCROLL
-!zone
-                ; add to white lines to hide mode switches not very stable
-                STA $C005                           ; WRITE AUX
-                LDA #$FF
-                LDX #39
--               STA $A50,x                
-                STA $8A8,X
-                DEX
-                BPL - 
-                STA $C004                           ; WRITE MAIN
-                LDX #39
--               STA $A50,x
-                STA $8A8,X                
-                DEX
-                BPL - 
-
-                ; set PAGE 2 for DGR window
-                LDA #$55
-                STA modPAGE_2+1
-                RTS
 ; ------------------------------------------------------------------------------------------------
 EFF_SCROLL
 !zone
@@ -1435,13 +1444,21 @@ D_REGF = $AF2C
 !align 255,0
 
 SCBUFFER 	!fill 30,$00
+                          
+TablePrepaPartL !byte <EMPTY,<PREPA_F,<PREPA_PARA,<PREPA_T,<EMPTY,<PREPA_CRED,<LOOP_SONG                      ; "EMPTY" is just a simple "RTS"
+TablePrepaPartH !byte >EMPTY,>PREPA_F,>PREPA_PARA,>PREPA_T,>EMPTY,>PREPA_CRED,>LOOP_SONG
 
-TablePrepaPartL !byte <PREPA_F,<PREPA_T,<PREPA_PARA,<PREPA_SCROLL,<PREPA_CRED,<INTRO                        ; TODO: change INTRO for PREPA END!
-TablePrepaPartH !byte >PREPA_F,>PREPA_T,>PREPA_PARA,>PREPA_SCROLL,>PREPA_CRED,>INTRO
-TablePARTL !byte <EFF_F,<EFF_T,<PARALLAX,<EFF_SCROLL,<CREDITS,<END
-TablePARTH !byte >EFF_F,>EFF_T,>PARALLAX,>EFF_SCROLL,>CREDITS,>END
-TimeLineL !byte <300,<600,<900,<1200,<1500,<(FRAMEMAX-1)
-TimeLineH !byte >300,>600,>900,>1200,>1500,>(FRAMEMAX-1)
+;                        0      1      2       3          4          5      6
+TablePARTL      !byte <INTRO,<EFF_F,<EFF_T,<PARALLAX,<EFF_SCROLL,<CREDITS,<EMPTY
+TablePARTH      !byte >INTRO,>EFF_F,>EFF_T,>PARALLAX,>EFF_SCROLL,>CREDITS,>EMPTY
+
+; xs = x*50
+;                 0     1     2     3    4     5         6
+;               10.3  20.5  51.2  93.1 133.2 194.6
+TimeLineL !byte <515,<1025,<2560,<4655,<6660,<9730,<(FRAMEMAX-1)
+TimeLineH !byte >515,>1025,>2560,>4655,>6660,>9730,>(FRAMEMAX-1)
+
+TableIntro !byte 5,8,0,2,7,1,4,6,3,7
 
 TEX1 	!byte 0x00,0x00,0x00,0x00,0x80,0x10,0x80,0x30,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x11,0x99,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x01,0x09,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x08,0x11,0x98,0x03,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x11,0x99,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x01,0x09,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x80,0x10,0x80,0x30,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x11,0x99,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x11,0x99,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x08,0x11,0x98,0x03,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x11,0x99,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x01,0x09,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x80,0x10,0x80,0x30,0x00,0x00,0x00,0x00,0x00,0x00,0x08,0x11,0x98,0x03,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x11,0x99,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00
 TEX2 	!byte 0x11,0x22,0x31,0x02,0x01,0x06,0x00,0x00,0x00,0x00,0x11,0x22,0x31,0x02,0x03,0x00,0x00,0x00,0x00,0x00,0x00,0x22,0x11,0x62,0x01,0x02,0x03,0x00,0x00,0x00,0x00,0x22,0x11,0x62,0x01,0x06,0x00,0x00,0x00,0x00,0x00,0x00,0x11,0x22,0x31,0x02,0x01,0x06,0x00,0x00,0x00,0x00,0x11,0x22,0x31,0x02,0x03,0x00,0x00,0x00,0x00,0x00,0x00,0x22,0x11,0x62,0x01,0x02,0x03,0x00,0x00,0x00,0x00,0x22,0x11,0x62,0x01,0x06,0x00,0x00,0x00,0x00,0x00,0x00,0x11,0x22,0x31,0x02,0x01,0x06,0x00,0x00,0x00,0x00,0x11,0x22,0x31,0x02,0x03,0x00,0x03,0x00,0x00,0x00,0x00,0x22,0x11,0x62,0x01,0x02,0x00,0x00,0x00,0x00,0x00,0x22,0x11,0x62,0x01,0x06,0x01,0x06,0x00,0x00,0x00,0x00,0x11,0x22,0x31,0x02,0x03,0x00,0x00,0x00,0x00,0x00,0x11,0x22,0x31,0x02,0x01,0x02,0x03,0x00,0x00,0x00,0x00,0x22,0x11,0x62,0x01,0x06,0x00,0x00,0x00,0x00,0x00,0x22,0x11,0x62,0x31,0x02,0x01,0x06,0x00,0x00,0x00,0x00,0x11,0x22,0x31,0x02,0x03,0x00,0x00,0x00,0x00,0x00,0x11,0x22,0x11,0x62,0x01,0x02,0x03,0x00,0x00,0x00,0x00,0x22,0x11,0x62,0x01,0x06,0x00,0x00,0x00,0x00,0x00,0x22
