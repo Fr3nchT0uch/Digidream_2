@@ -7,6 +7,7 @@
 ; GROUiK
 ; 04/2024
 ;
+; v0.07 - first "finale" version
 ; v0.06 - add color var for effect1 / various improvements (again)
 ; v0.05 - Intro Effect added / various improvements / timeline added
 ; v0.04 - Other DGR Effects added / Credits page displayed
@@ -139,7 +140,7 @@ countIntro      = $B1
 color           = $B2
 
 ; track timing
-indexTTrack     = $B3
+indexTTrack     = $B4
 
 ; WARNING: do not reach $CC
 ; =================================================================================================
@@ -219,7 +220,7 @@ MAIN
 		        STA FIRSTSEC 
                 LDA #$60            		
                 STA BUFFER+1        
-                LDA #64                             ; TO CHECK !!!                     
+                LDA #55                                                  
                 STA COUNT_TOTAL     
                 JSR FLOAD
 
@@ -434,7 +435,7 @@ INTRO           ; AUX Color [0x00,0x08,0x01,0x09,0x02,0x0A,0x03,0x0B,0x04,0x0C,0
 !zone           ;              00   01   02   03   04   05   06   07   08   09   0A   0B   0C   0D   0E   0F
                 INC countIntro
                 LDA countIntro
-                CMP #5
+                CMP #6
                 BNE .quit
                 LDA #00
                 STA countIntro
@@ -493,6 +494,15 @@ PREPA_F
                 LDA #$57
                 STA modGFX_1+1                      ; set HGR
                 RTS
+; -------------------------------------------------------------------------------------------------
+PREPA_F2
+!zone
+                ; we just need to change high part of OFFSET (tables must be aligned)
+                LDX #>TEX1A
+                LDY #>TEX1M
+                JSR CHANGE_TEX
+                RTS
+                RTS
 ; ------------------------------------------------------------------------------------------------
 CHANGE_TEX
 !zone           ; X = offset HIGH TEX AUX part / Y = offset HIGH TEX MAIN part 
@@ -542,6 +552,17 @@ PREPA_PARA
 !zone           ; we just need to change high part of OFFSET (tables must be aligned)
                 LDX #>TEX2A
                 LDY #>TEX2M
+                LDA #00
+                STA color
+                JSR CHANGE_TEX                
+                RTS
+; -------------------------------------------------------------------------------------------------
+PREPA_PARA2
+!zone           ; we just need to change high part of OFFSET (tables must be aligned)
+                LDX #>TEX2A
+                LDY #>TEX2M
+                LDA #$00
+                STA color
                 JSR CHANGE_TEX                
                 RTS
 ; -------------------------------------------------------------------------------------------------
@@ -1433,19 +1454,19 @@ D_REGF = $AF2C
 !align 255,0
 
 SCBUFFER 	!fill 30,$00
-                          
-TablePrepaPartL !byte <EMPTY,<PREPA_F,<PREPA_PARA,<PREPA_T,<EMPTY,<PREPA_CRED,<LOOP_SONG                      ; "EMPTY" is just a simple "RTS"
-TablePrepaPartH !byte >EMPTY,>PREPA_F,>PREPA_PARA,>PREPA_T,>EMPTY,>PREPA_CRED,>LOOP_SONG
+;                        0       1          2         3         4        5          6        7          8 
+TablePrepaPartL !byte <EMPTY,<PREPA_F,<PREPA_PARA,<PREPA_F2,<PREPA_T,<PREPA_PARA2,<EMPTY,<PREPA_CRED,<LOOP_SONG                      ; "EMPTY" is just a simple "RTS"
+TablePrepaPartH !byte >EMPTY,>PREPA_F,>PREPA_PARA,>PREPA_F2,>PREPA_T,>PREPA_PARA2,>EMPTY,>PREPA_CRED,>LOOP_SONG
 
-;                        0      1      2       3          4          5      6
-TablePARTL      !byte <INTRO,<CALL1_EFF1,<CALL2_EFF1,<CALL1_EFF1,<EFF_SCROLL,<CREDITS,<EMPTY
-TablePARTH      !byte >INTRO,>CALL1_EFF1,>CALL2_EFF1,>CALL1_EFF1,>EFF_SCROLL,>CREDITS,>EMPTY
+;                        0         1           2          3          4            5           6          7       8
+TablePARTL      !byte <INTRO,<CALL1_EFF1,<CALL2_EFF1,<CALL2_EFF1,<CALL1_EFF1,<CALL1_EFF1,<EFF_SCROLL,<CREDITS,<EMPTY
+TablePARTH      !byte >INTRO,>CALL1_EFF1,>CALL2_EFF1,>CALL2_EFF1,>CALL1_EFF1,>CALL1_EFF1,>EFF_SCROLL,>CREDITS,>EMPTY
 
 ; xs = x*50
-;                 0     1     2     3    4     5         6
-;               10.3  20.5  51.2  93.1 133.2 194.6
-TimeLineL !byte <515,<1025,<2560,<4655,<6660,<9730,<(FRAMEMAX-1)
-TimeLineH !byte >515,>1025,>2560,>4655,>6660,>9730,>(FRAMEMAX-1)
+;                 0     1     2     3    4     5     6     7        8        
+;               10.3  20.5  30.7  40.9  51.2  71,7  93.1 133.2 
+TimeLineL !byte <515,<1025,<1535,<2048,<2560,<3585,<4655,<6660,<(FRAMEMAX-1)
+TimeLineH !byte >515,>1025,>1535,>2048,>2560,>3585,>4655,>6660,>(FRAMEMAX-1)
 
 TableIntro !byte 5,8,0,2,7,1,4,6,3,7
 

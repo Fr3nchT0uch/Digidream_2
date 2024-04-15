@@ -51,7 +51,7 @@ $(DISK): floadc.b BOOT effect.b main.b
 # music			T2 S0	> $1000 (M) * >> $1000 (A)
 	$(W2W) c p 2 0 $(DISK) music\ZIC.lz4
 # HGR			T5 S0	> $2000
-	$(W2W) c p 5 0 $(DISK) hgr\PI.STEP11
+	$(W2W) c p 5 0 $(DISK) hgr\PI.STEP14
 # DGR			T7 S0 	> $800M | T7 S16 > $800A
 	$(W2W) c p 7 0 $(DISK) dgr\1.main
 	$(W2W) c p 7 16 $(DISK) dgr\1.aux
