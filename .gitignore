@@ -5,6 +5,7 @@ lbl_*.txt
 Thumbs.db
 build.bat
 floadc_lbl.a
+effect_lbl.a
 *.woz
 *.dsk
 *.lz4
