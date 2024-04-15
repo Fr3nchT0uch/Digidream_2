@@ -7,6 +7,7 @@
 ; GROUiK
 ; 04/2024
 ;
+; v0.06 - add color var for effect1 / various improvements (again)
 ; v0.05 - Intro Effect added / various improvements / timeline added
 ; v0.04 - Other DGR Effects added / Credits page displayed
 ; v0.03 - DGR Effect added (some tests for now) / DGR "intro" screen (WIP)
@@ -126,7 +127,7 @@ bSidOff         = $A7                       ; bolean if SID-VOICES on this tick!
 valEOR          = $A8
 
 ; effects
-indexTEX		= $A9                       ; TODO: group variables not used at the same time
+indexTEX		= $A9                       
 count		    = $AA
 indexLAYER1	    = $AB
 countLAYER1	    = $AC
@@ -135,9 +136,10 @@ countLAYER2	    = $AE
 indexIntro      = $AF
 saveIntro       = $B0
 countIntro      = $B1
+color           = $B2
 
 ; track timing
-indexTTrack     = $B2
+indexTTrack     = $B3
 
 ; WARNING: do not reach $CC
 ; =================================================================================================
@@ -418,9 +420,12 @@ modJSR_PREPA    JSR $FFFF
 ; =================================================================================================
 LOOP_SONG
 !zone
+                DEC indexTTrack                     ; go back to previous timeline index state (to loop indefinitely!)
                 LDA #PATTERNSIZE
             	STA count1Pat
             	LDX #00
+                STX Tick
+                STX Tick+1
                 STX indexPat
             	JSR INIT_PATTERN                    ; init music data with initial parameters
                 RTS
@@ -476,6 +481,8 @@ PREPA_CRED
 ; -------------------------------------------------------------------------------------------------
 PREPA_F
 !zone
+                LDA #$FF
+                STA color
                 LDA #$0C
                 STA mod80_1+1                       ; set $C00C = 80 col ON
                 LDA #$5F
@@ -486,23 +493,6 @@ PREPA_F
                 LDA #$57
                 STA modGFX_1+1                      ; set HGR
                 RTS
-; -------------------------------------------------------------------------------------------------
-EFF_F
-!zone
-                LDA count
-		        EOR #01
-		        STA count
-		        BEQ ++
-		        LDX indexTEX
-		        STA $C002                           ; READ MAIN
-                JSR EFFECT1
-                STA $C003                           ; READ AUX 
-		        INX
-		        CPX #16
-		        BNE +
-		        LDX #00
-+		        STX indexTEX                
-++              RTS
 ; ------------------------------------------------------------------------------------------------
 CHANGE_TEX
 !zone           ; X = offset HIGH TEX AUX part / Y = offset HIGH TEX MAIN part 
@@ -548,7 +538,14 @@ PREPA_T
                 JSR CHANGE_TEX
                 RTS
 ; -------------------------------------------------------------------------------------------------
-EFF_T                                               ; TODO reunit EFF_F/EFF_T/PARALLAX ?
+PREPA_PARA
+!zone           ; we just need to change high part of OFFSET (tables must be aligned)
+                LDX #>TEX2A
+                LDY #>TEX2M
+                JSR CHANGE_TEX                
+                RTS
+; -------------------------------------------------------------------------------------------------
+CALL1_EFF1                                            
 !zone
                 LDA count
 		        EOR #01
@@ -565,14 +562,7 @@ EFF_T                                               ; TODO reunit EFF_F/EFF_T/PA
 +		        STX indexTEX                
 ++              RTS
 ; -------------------------------------------------------------------------------------------------
-PREPA_PARA
-!zone           ; we just need to change high part of OFFSET (tables must be aligned)
-                LDX #>TEX2A
-                LDY #>TEX2M
-                JSR CHANGE_TEX                
-                RTS
-; -------------------------------------------------------------------------------------------------
-PARALLAX                                            ; TODO reunit EFF_F/EFF_T/PARALLAX ?
+CALL2_EFF1                                            
 !zone
                 LDA count
 		        EOR #01
@@ -582,10 +572,9 @@ PARALLAX                                            ; TODO reunit EFF_F/EFF_T/PA
 		        STA $C002                           ; READ MAIN
                 JSR EFFECT1
                 STA $C003                           ; READ AUX 
-		        INX
-		        CPX #16
-		        BNE +
-		        LDX #00
+		        DEX
+		        BPL +
+		        LDX #15
 +		        STX indexTEX                
 ++              RTS
 ; ------------------------------------------------------------------------------------------------
@@ -1449,8 +1438,8 @@ TablePrepaPartL !byte <EMPTY,<PREPA_F,<PREPA_PARA,<PREPA_T,<EMPTY,<PREPA_CRED,<L
 TablePrepaPartH !byte >EMPTY,>PREPA_F,>PREPA_PARA,>PREPA_T,>EMPTY,>PREPA_CRED,>LOOP_SONG
 
 ;                        0      1      2       3          4          5      6
-TablePARTL      !byte <INTRO,<EFF_F,<EFF_T,<PARALLAX,<EFF_SCROLL,<CREDITS,<EMPTY
-TablePARTH      !byte >INTRO,>EFF_F,>EFF_T,>PARALLAX,>EFF_SCROLL,>CREDITS,>EMPTY
+TablePARTL      !byte <INTRO,<CALL1_EFF1,<CALL2_EFF1,<CALL1_EFF1,<EFF_SCROLL,<CREDITS,<EMPTY
+TablePARTH      !byte >INTRO,>CALL1_EFF1,>CALL2_EFF1,>CALL1_EFF1,>EFF_SCROLL,>CREDITS,>EMPTY
 
 ; xs = x*50
 ;                 0     1     2     3    4     5         6
