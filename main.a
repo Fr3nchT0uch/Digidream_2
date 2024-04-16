@@ -7,6 +7,7 @@
 ; GROUiK
 ; 04/2024
 ;
+; v0.08 - various optimizations
 ; v0.07 - first "finale" version
 ; v0.06 - add color var for effect1 / various improvements (again)
 ; v0.05 - Intro Effect added / various improvements / timeline added
@@ -42,10 +43,9 @@ token       	= $38
 
 ; USED by PLAYER PYM + INT
 ; ------------------------
-saveA       	= $4B
-saveY       	= $4C
-saveX       	= $4D
-Tick        	= $4E   ; +$4F
+saveA       	= $4D
+saveY       	= $4E
+saveX       	= $4F
 
 nREG0	        = $50
 vREG0	        = $51
@@ -92,40 +92,46 @@ vREG9           = $86
 vREGA           = $87
 
 count1Pat   	= $88
-indexPat    	= $89
 
-iREG0       	= $8A
-iREG1       	= $8B
-iREG2       	= $8C
-iREG3       	= $8D
-iREG4       	= $8E
-iREG5       	= $8F
-iREG6       	= $90
-iREG7       	= $91
-iREG8       	= $92
-iREG9       	= $93
-iREGA       	= $94
-iREGB       	= $95
-iREGC       	= $96
-iREGD       	= $97
+iREG0       	= $89
+iREG1       	= $8A
+iREG2       	= $8B
+iREG3       	= $8C
+iREG4       	= $8D
+iREG5       	= $8E
+iREG6       	= $8F
+iREG7       	= $90
+iREG8       	= $91
+iREG9       	= $92
+iREGA       	= $93
+iREGB       	= $94
+iREGC       	= $95
+iREGD       	= $96
 
-nREGE		    = $98
-vREGE		    = $99
-dREGE		    = $9A	; +$9B
-nREGF		    = $9C
-vREGF		    = $9D
-dREGF		    = $9E	; +$9F
-iREGE       	= $A0
-iREGF       	= $A1
+nREGE		    = $97
+vREGE		    = $98
+dREGE		    = $99	; +$9A
+nREGF		    = $9B
+vREGF		    = $9C
+dREGF		    = $9D	; +$9E
+iREGE       	= $9F
+iREGF       	= $A0
 
+; effet
+color           = $A1
 ; SID-VOICES specific       
 valV            = $A2
 intL            = $A3
 intH            = $A4
-sidOff          = $A5                       ; toggle for activate SID-VOICES effect
-bSIDA           = $A6                       
-bSidOff         = $A7                       ; bolean if SID-VOICES on this tick!
-valEOR          = $A8
+valEOR          = $A5                           ; toggle for activate SID-VOICES effect
+bSidOff         = $A6                           ; bolean if SID-VOICES on this tick!   
+; ------------------------------------------------
+; all ZP variables that need to be initialized to zero are grouped together below!
+ZP_ZERO         = $A7                           ; = same as first address of vars need to be reset
+; ------------------------------------------------
+; SID_VOICES
+bSIDA           = $A7                       
+sidOff          = $A8
 
 ; effects
 indexTEX		= $A9                       
@@ -137,10 +143,11 @@ countLAYER2	    = $AE
 indexIntro      = $AF
 saveIntro       = $B0
 countIntro      = $B1
-color           = $B2
 
-; track timing
-indexTTrack     = $B4
+; player PYM / track timing
+indexPat    	= $B2
+indexTTrack     = $B3
+Tick        	= $B4   ; +$B5
 
 ; WARNING: do not reach $CC
 ; =================================================================================================
@@ -211,7 +218,20 @@ MAIN
             	STA COUNT_TOTAL     
             	JSR FLOAD
 		        
+                ; fill PAGE1 DLORES with WHITE color
+                ; AUX
+                LDY #00
+                LDX #$04
+                LDA #$FF                        
+.mod0           STA $400,Y
+                INY
+                BNE .mod0
+                INC .mod0+2
+                DEX
+                BNE .mod0
+
                 STA $C004 		                    ; write MAIN          
+                
                 ; effect routine loading to $6000
                 LDA #$08
                 STA TRACK_TO_REACH         		
@@ -224,21 +244,7 @@ MAIN
                 STA COUNT_TOTAL     
                 JSR FLOAD
 
-
                 BIT DRVOFF		                    ; stop DISK II / ALL loading finished
-                
-                STA $C005                           ; WRITE AUX
-                ; fill PAGE1 DLORES with WHITE color
-                ; AUX
-                LDY #00
-                LDX #$04
-                LDA #$FF                        
-.mod0           STA $400,Y
-                INY
-                BNE .mod0
-                INC .mod0+2
-                DEX
-                BNE .mod0
 
                 ; set mode for "INTRO" part
                 BIT $C050                           ; mode GFX
@@ -259,7 +265,7 @@ MAIN
                 BNE .mod2
                 ; ---------------------------------------
 
-                STA $C003                           ; READ AUX ($200-$BFFF)
+                STA $C003                           ; READ AUX ($200-$BFFF) - for Music Data
                 
 ; =================================================================================================
 Init_MB     	; init Mockingboard (SLOT#4)        
@@ -277,28 +283,20 @@ Init_MB     	; init Mockingboard (SLOT#4)
             	LDA #$04
             	STA AY_ADDR
             	; ---------
+                ; init var
             	LDA #PATTERNSIZE
             	STA count1Pat
-                LDA #02
-		        STA countLAYER1
-                LDA #01
-                STA bSidOff                         ; =1 for initial INT
-            	LDA #00
-                STA countIntro
-                STA saveIntro
-                STA indexIntro
-                STA indexTTrack
-                STA indexTEX
-                STA count
-                STA bSIDA
-            	STA Tick
-            	STA Tick+1
-            	STA indexPat
-                STA sidOff
-		        STA indexLAYER1
-		        STA indexLAYER2
-		        STA countLAYER2
-            	TAX                 		        ; = 0 - init with pattern 0
+                LDX #02
+		        STX countLAYER1
+                DEX                                 ; =1 for initial INT
+                STX bSidOff                         
+            	DEX                                 ; = 0
+                TXA
+                LDY #14
+-               STA ZP_ZERO,Y
+                DEY
+                BPL -
+            	; X = 0 - init with pattern 0
             	JSR INIT_PATTERN                    ; init music data with initial parameters
 ; -------------------------------------
 Init_INT    	; init interrupt
@@ -435,7 +433,7 @@ INTRO           ; AUX Color [0x00,0x08,0x01,0x09,0x02,0x0A,0x03,0x0B,0x04,0x0C,0
 !zone           ;              00   01   02   03   04   05   06   07   08   09   0A   0B   0C   0D   0E   0F
                 INC countIntro
                 LDA countIntro
-                CMP #6
+                CMP #8
                 BNE .quit
                 LDA #00
                 STA countIntro
@@ -501,7 +499,6 @@ PREPA_F2
                 LDX #>TEX1A
                 LDY #>TEX1M
                 JSR CHANGE_TEX
-                RTS
                 RTS
 ; ------------------------------------------------------------------------------------------------
 CHANGE_TEX
@@ -640,7 +637,7 @@ EFF_SCROLL
                 JSR EFFECT2
                 STA $C003                           ; READ AUX 
 
-+		        RTS
+		        RTS
 ; =================================================================================================
 INT_ROUT 
 !zone                    
@@ -1381,52 +1378,53 @@ modDECOMP
 					RTS					
 .s5					INC 	src2+1			
 					RTS
+EO_Decomp
 ; =================================================================================================
-!align 255,0
-WAIT65              ; = attend Y * 65 cycles exactement (JSR/RTS compris -> APPEL EN 8 cycles obligatoire -> LDY #xx / JSR WAIT65)
-WAIT65ZP = * + 1    ; = attend Y * 65 cycles exactement (JSR/RTS compris -> APPEL EN 9 cycles obligatoire -> LDY ZP / JSR WAIT65Z)
+WAIT65                      ; = attend Y * 65 cycles exactement (JSR/RTS compris -> APPEL EN 8 cycles obligatoire -> LDY #xx / JSR WAIT65)
+WAIT65ZP = * + 1            ; = attend Y * 65 cycles exactement (JSR/RTS compris -> APPEL EN 9 cycles obligatoire -> LDY ZP / JSR WAIT65Z)
 !zone           
-		    LDA $EA     ; 3 (dummy)  -> on arrive sur NOP si JSR WAIT65Z
-WAIT62      ; = attend 1*62 cycles exactement (JSR/RTS compris -> LDY #01 / JSR WAIT63)
-            DEY			; 2					
-		    BEQ .S1	    ; 3/2			
+		        LDA $EA     ; 3 (dummy)  -> on arrive sur NOP si JSR WAIT65Z
+WAIT62          ; = attend 1*62 cycles exactement (JSR/RTS compris -> LDY #01 / JSR WAIT63)
+                DEY			; 2					
+		        BEQ .S1	    ; 3/2			
                   
-.WL1 	    LDX #$0B				            
-.WL2 	    DEX							
-		    BNE .WL2	; 2 + (2+3)*10 + 2 + 2 = 56															
+.WL1 	        LDX #$0B				            
+.WL2 	        DEX							
+		        BNE .WL2	; 2 + (2+3)*10 + 2 + 2 = 56															
                       
-		    NOP			; 2					
-		    NOP			; 2					
-		    DEY			; 2					
-		    BNE .WL1	; (56+2+2+2+3)*(Y-2) + 56 + 2 + 2 + 2 + 2 = 65*Y - 2*65 + 64 = 65*Y - 66				
+		        NOP			; 2					
+		        NOP			; 2					
+		        DEY			; 2					
+		        BNE .WL1	; (56+2+2+2+3)*(Y-2) + 56 + 2 + 2 + 2 + 2 = 65*Y - 2*65 + 64 = 65*Y - 66				
 
-WAIT59      ; = attend 1*59 cycles exactement (JSR/RTS compris -> LDY #xx / JSR WAIT59)											                      
-		    LDX #$08					
-.WL3 	    DEX							
-		    BNE .WL3	; 2 + (2+3)*7 + 2 + 2 = 41					
+WAIT59          ; = attend 1*59 cycles exactement (JSR/RTS compris -> LDY #xx / JSR WAIT59)											                      
+		        LDX #$08					
+.WL3 	        DEX							
+		        BNE .WL3	; 2 + (2+3)*7 + 2 + 2 = 41					
                 							
-		    NOP			; 2					
-		    NOP			; 2					
-		    RTS			; 6
+		        NOP			; 2					
+		        NOP			; 2					
+		        RTS			; 6
 
-                        ; WAIT62 = 2 + 2 + (65-66) + 41 + 2 + 2 + 6 + (8) = 62 
-                        ; WAIT65 = 3 + 2 + 2 + (65*Y-66) + 41 + 2 + 2 + 6 + (8) = 65*Y
-                        ; WAIT59 = 41 + 2 + 2 + 6 + (8) = 59 					
+                            ; WAIT62 = 2 + 2 + (65-66) + 41 + 2 + 2 + 6 + (8) = 62 
+                            ; WAIT65 = 3 + 2 + 2 + (65*Y-66) + 41 + 2 + 2 + 6 + (8) = 65*Y
+                            ; WAIT59 = 41 + 2 + 2 + 6 + (8) = 59 					
 
-WAIT57      ; = attend 1*57 cycles exactement (JSR/RTS compris -> LDY #xx / JSR WAIT57)											         
-.S1	 	    NOP         ; 2
-WAIT55      ; = attend 1*55 cycles exactement (JSR/RTS compris -> LDY #xx / JSR WAIT55)	
-            LDX #08					
+WAIT57          ; = attend 1*57 cycles exactement (JSR/RTS compris -> LDY #xx / JSR WAIT57)											         
+.S1	 	        NOP         ; 2
+WAIT55          ; = attend 1*55 cycles exactement (JSR/RTS compris -> LDY #xx / JSR WAIT55)	
+                LDX #08					
                       
-.WL4 	    DEX							
-		    BNE .WL4    ; 2 + (2+3)*7 + 2 + 2 = 41					
-		    RTS         ; 6
-                        ; = 49
+.WL4 	        DEX							
+		        BNE .WL4    ; 2 + (2+3)*7 + 2 + 2 = 41					
+		        RTS         ; 6
+                            ; = 49
 
-                        ; WAIT65 = 3 + 2 + 3 + 49 + (8) = 65
-                        ; WAIT62 = 2 + 3 + 49 + (8) = 62
-                        ; WAIT57 = 49 + (8) = 57
-                        ; WAIT55 = 47 + (8) = 55   
+                            ; WAIT65 = 3 + 2 + 3 + 49 + (8) = 65
+                            ; WAIT62 = 2 + 3 + 49 + (8) = 62
+                            ; WAIT57 = 49 + (8) = 57
+                            ; WAIT55 = 47 + (8) = 55
+EO_CODE   
 ; =================================================================================================
 AY_ADDR         = $C400        ; AY1 = $C400 / AY2 = $C480 (MB SLOT#4)
 
@@ -1451,8 +1449,6 @@ D_REGE = $8DAE
 D_REGF = $AF2C
 
 ; ==================================================================================================
-!align 255,0
-
 SCBUFFER 	!fill 30,$00
 ;                        0       1          2         3         4        5          6        7          8 
 TablePrepaPartL !byte <EMPTY,<PREPA_F,<PREPA_PARA,<PREPA_F2,<PREPA_T,<PREPA_PARA2,<EMPTY,<PREPA_CRED,<LOOP_SONG                      ; "EMPTY" is just a simple "RTS"
@@ -1462,13 +1458,15 @@ TablePrepaPartH !byte >EMPTY,>PREPA_F,>PREPA_PARA,>PREPA_F2,>PREPA_T,>PREPA_PARA
 TablePARTL      !byte <INTRO,<CALL1_EFF1,<CALL2_EFF1,<CALL2_EFF1,<CALL1_EFF1,<CALL1_EFF1,<EFF_SCROLL,<CREDITS,<EMPTY
 TablePARTH      !byte >INTRO,>CALL1_EFF1,>CALL2_EFF1,>CALL2_EFF1,>CALL1_EFF1,>CALL1_EFF1,>EFF_SCROLL,>CREDITS,>EMPTY
 
-; xs = x*50
-;                 0     1     2     3    4     5     6     7        8        
-;               10.3  20.5  30.7  40.9  51.2  71,7  93.1 133.2 
-TimeLineL !byte <515,<1025,<1535,<2048,<2560,<3585,<4655,<6660,<(FRAMEMAX-1)
-TimeLineH !byte >515,>1025,>1535,>2048,>2560,>3585,>4655,>6660,>(FRAMEMAX-1)
+; tick at xs = x*50
+;                   0       1     2     3    4     5     6     7        8        
+;                  10.3   20.5  30.7  40.9  51.2  71,7  93.1 133.2 
+TimeLineL !byte <(515-8),<1025,<1535,<2048,<2560,<3585,<4655,<6660,<(FRAMEMAX-1)
+TimeLineH !byte >(515-8),>1025,>1535,>2048,>2560,>3585,>4655,>6660,>(FRAMEMAX-1)
 
-TableIntro !byte 5,8,0,2,7,1,4,6,3,7
+TableIntro !byte 4,8,0,2,7,1,5,6,3,7
+
+!align 255,0
 
 TEX1 	!byte 0x00,0x00,0x00,0x00,0x80,0x10,0x80,0x30,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x11,0x99,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x01,0x09,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x08,0x11,0x98,0x03,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x11,0x99,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x01,0x09,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x80,0x10,0x80,0x30,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x11,0x99,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x11,0x99,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x08,0x11,0x98,0x03,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x11,0x99,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x01,0x09,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x80,0x10,0x80,0x30,0x00,0x00,0x00,0x00,0x00,0x00,0x08,0x11,0x98,0x03,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x11,0x99,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00
 TEX2 	!byte 0x11,0x22,0x31,0x02,0x01,0x06,0x00,0x00,0x00,0x00,0x11,0x22,0x31,0x02,0x03,0x00,0x00,0x00,0x00,0x00,0x00,0x22,0x11,0x62,0x01,0x02,0x03,0x00,0x00,0x00,0x00,0x22,0x11,0x62,0x01,0x06,0x00,0x00,0x00,0x00,0x00,0x00,0x11,0x22,0x31,0x02,0x01,0x06,0x00,0x00,0x00,0x00,0x11,0x22,0x31,0x02,0x03,0x00,0x00,0x00,0x00,0x00,0x00,0x22,0x11,0x62,0x01,0x02,0x03,0x00,0x00,0x00,0x00,0x22,0x11,0x62,0x01,0x06,0x00,0x00,0x00,0x00,0x00,0x00,0x11,0x22,0x31,0x02,0x01,0x06,0x00,0x00,0x00,0x00,0x11,0x22,0x31,0x02,0x03,0x00,0x03,0x00,0x00,0x00,0x00,0x22,0x11,0x62,0x01,0x02,0x00,0x00,0x00,0x00,0x00,0x22,0x11,0x62,0x01,0x06,0x01,0x06,0x00,0x00,0x00,0x00,0x11,0x22,0x31,0x02,0x03,0x00,0x00,0x00,0x00,0x00,0x11,0x22,0x31,0x02,0x01,0x02,0x03,0x00,0x00,0x00,0x00,0x22,0x11,0x62,0x01,0x06,0x00,0x00,0x00,0x00,0x00,0x22,0x11,0x62,0x31,0x02,0x01,0x06,0x00,0x00,0x00,0x00,0x11,0x22,0x31,0x02,0x03,0x00,0x00,0x00,0x00,0x00,0x11,0x22,0x11,0x62,0x01,0x02,0x03,0x00,0x00,0x00,0x00,0x22,0x11,0x62,0x01,0x06,0x00,0x00,0x00,0x00,0x00,0x22

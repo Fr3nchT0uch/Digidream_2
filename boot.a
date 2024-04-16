@@ -4,7 +4,7 @@
 ; v 0.02 - issue with INT not reset by REBOOT fixed (see comment in code)
 ;
 !cpu 6502
-!convtab "a2txt.bin"    ; incorporation table caractère APPLE II (normal) générale
+!convtab "a2txt.bin"    ; chars table (normal)
 
 !sl "lbl_boot.txt"
 
@@ -53,7 +53,7 @@ nSector = * + 1
             STX TRACK_TO_REACH            ; track 
             LDA #>MAIN              	; 
             STA BUFFER+1            	; buffer high = $D00
-            LDA #26			            ; (WARNING 1 sector = 128 bytes)          
+            LDA #23			            ; (WARNING 1 sector = 128 bytes)          
             STA COUNT_TOTAL
 		    LDA #$FF
 		    STA State_Loader              
@@ -66,7 +66,7 @@ INIT	    JSR $FC58			        ; HOME (ROM)
 		    LDA #$FF
         	STA $C403       		    ; activate MB 4c (IIc)
         	STA $C404
-            ; *** added to prevent issue during fload if Reboot with CTRL-OA-RESET during INT active (INT not reset)
+            ; *** added to prevent issue during fload if Reboot with CTRL-OA-RESET during INT active (INT are NOT reset)
             ; => first CLI encountered during fload re-enable previous INT
             LDA #%01100000      		; disable all INT (T1/T2/6522-1/2)   
             STA $C40E           		; VIA_IER/1                    
