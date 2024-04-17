@@ -7,6 +7,7 @@
 ; GROUiK
 ; 04/2024
 ;
+; v0.11 - hgr gfx modified / player improvement
 ; v0.10 - various optimizations (again)
 ; v0.09 - add full loop (track+effects)
 ; v0.08 - various optimizations
@@ -794,6 +795,9 @@ mod_comp_intH   CPY #00                             ; compare to last int delay 
 		        STY AY_ADDR
 		        STX AY_ADDR
 		
+                CLI
+                SEI
+
 		        ; REGISTER 2
         		LDA #$02
 		        STA AY_ADDR+1
@@ -806,6 +810,9 @@ mod_comp_intH   CPY #00                             ; compare to last int delay 
 		        STY AY_ADDR
 		        STX AY_ADDR
 		
+                CLI
+                SEI
+
          		; REGISTER 3
         		LDA #$03
 		        STA AY_ADDR+1
@@ -817,6 +824,9 @@ mod_comp_intH   CPY #00                             ; compare to last int delay 
 		        STA AY_ADDR+1	
 		        STY AY_ADDR
 		        STX AY_ADDR
+
+                CLI
+                SEI
 
         		; REGISTER 4
         		LDA #$04
@@ -830,6 +840,9 @@ mod_comp_intH   CPY #00                             ; compare to last int delay 
 		        STY AY_ADDR
 		        STX AY_ADDR
 
+                CLI
+                SEI
+
          		; REGISTER 5
         		LDA #$05
 		        STA AY_ADDR+1
@@ -842,6 +855,9 @@ mod_comp_intH   CPY #00                             ; compare to last int delay 
 		        STY AY_ADDR
 		        STX AY_ADDR
 		
+                CLI
+                SEI
+
         		; REGISTER 6
         		LDA #$06
 		        STA AY_ADDR+1
@@ -853,6 +869,9 @@ mod_comp_intH   CPY #00                             ; compare to last int delay 
 		        STA AY_ADDR+1	
 		        STY AY_ADDR
 		        STX AY_ADDR	
+
+                CLI
+                SEI
 		
         		; REGISTER 7
         		LDA #$07
@@ -865,6 +884,9 @@ mod_comp_intH   CPY #00                             ; compare to last int delay 
 		        STA AY_ADDR+1	
 		        STY AY_ADDR
 		        STX AY_ADDR
+
+                CLI
+                SEI
 
         		; REGISTER 8
                 LDA bSIDA                   ; skip if this voice is used for SID_VOICES
@@ -880,7 +902,10 @@ mod_comp_intH   CPY #00                             ; compare to last int delay 
 		        STY AY_ADDR
 		        STX AY_ADDR
 ++      
-         		; REGISTER 9
+         		CLI
+                SEI
+
+                ; REGISTER 9
                 LDA #$09
 		        STA AY_ADDR+1
 		        LDA #$07	
@@ -890,7 +915,10 @@ mod_comp_intH   CPY #00                             ; compare to last int delay 
                 LDA vREG9	
 		        STA AY_ADDR+1	
 		        STY AY_ADDR
-		        STX AY_ADDR 
+		        STX AY_ADDR
+
+                CLI
+                SEI 
 
                 ; REGISTER 10
         		LDA #$0A
@@ -903,6 +931,9 @@ mod_comp_intH   CPY #00                             ; compare to last int delay 
 		        STA AY_ADDR+1	
 		        STY AY_ADDR
 		        STX AY_ADDR
+
+                CLI
+                SEI
 
         		; REGISTER 11
         		LDA #$0B
@@ -917,6 +948,9 @@ mod_comp_intH   CPY #00                             ; compare to last int delay 
 		        STX AY_ADDR
 
         		; REGISTER 12       		; 0 for all values
+
+                CLI
+                SEI
 
          		; REGISTER 13	            ; skip if = $FF
 		        LDA vREGD
