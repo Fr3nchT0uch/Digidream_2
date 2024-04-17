@@ -7,6 +7,7 @@
 ; GROUiK
 ; 04/2024
 ;
+; v0.10 - various optimizations (again)
 ; v0.09 - add full loop (track+effects)
 ; v0.08 - various optimizations
 ; v0.07 - first "finale" version
@@ -125,7 +126,7 @@ saveIntro       = $A2
 valV            = $A3
 intL            = $A4
 intH            = $A5
-valEOR          = $A6                           ; toggle for activate SID-VOICES effect
+valEOR          = $A6                           
 bSidOff         = $A7                           ; bolean if SID-VOICES on this tick!   
 ; ------------------------------------------------
 ; all ZP variables that need to be initialized to zero are grouped together below!
@@ -133,22 +134,21 @@ ZP_ZERO         = $A8                           ; = same as first address of var
 ; ------------------------------------------------
 ; SID_VOICES
 bSIDA           = $A8                       
-sidOff          = $A9
 
 ; effects
-indexTEX		= $AA                       
-count		    = $AB
-indexLAYER1	    = $AC
-countLAYER1	    = $AD
-indexLAYER2	    = $AE
-countLAYER2	    = $AF
-indexIntro      = $B0
-countIntro      = $B1
+indexTEX		= $A9                       
+count		    = $AA
+indexLAYER1	    = $AB
+countLAYER1	    = $AC
+indexLAYER2	    = $AD
+countLAYER2	    = $AE
+indexIntro      = $AF
+countIntro      = $B0
 
 ; player PYM / track timing
-indexPat    	= $B2
-indexTTrack     = $B3
-Tick        	= $B4   ; +$B5
+indexPat    	= $B1
+indexTTrack     = $B2
+Tick        	= $B3   ; +$B4
 
 ; WARNING: do not reach $CC
 ; =================================================================================================
@@ -373,17 +373,6 @@ modPAGE_1       BIT $C055                           ; PAGE 2 / PAGE 1
 modGFX_1        BIT $C056                           ; GR / HGR (again)
                 CLI                                 ; enable INT after switch to HGR again
                 
-                ; test keyboard to toogle SID/Channels
-                LDA $C000
-                BPL .next
-                CMP #$A0                            ; test SPACE key to toogle sid off/on
-                STA $C010
-                BNE .next
-                LDA sidOff
-                EOR #$01
-                STA sidOff
-
-.next           
 modJSR_PART     JSR EMPTY
             	
                 ; play one tick
@@ -417,7 +406,7 @@ modJSR_PREPA    JSR $FFFF
 ResetVar
 !zone           ; x must be zero here!
                 TXA
-                LDY #13
+                LDY #12
 -               STA ZP_ZERO,Y
                 DEY
                 BPL -
@@ -669,11 +658,7 @@ EFF_SCROLL
 		        RTS
 ; =================================================================================================
 INT_ROUT 
-!zone                    
-                STA saveA      
-            	STX saveX     
-            	STY saveY
-
+!zone                
                 ; check if 6522-1/T1 INT (sid voice)
         	    BIT $C40D                           ; bit6 IFR -> V - if set, Timer1 = 0 so int occured      
                 BVS .int_sid   
@@ -687,17 +672,14 @@ mod80_2         STA $C00D		                    ; 80 colonnes
 modAN3_2		STA $C05E		                    ; RESET AN3
                 
                 BIT $C484                           ; reset IFR (6522-2)
-                LDA saveA
-            	LDX saveX
-            	LDY saveY
                 RTI
 
 .int_sid        ; 6522-1/T1 INT occured / SID VOICE effect
+                STA saveA                           ; save A/Y registers used later      
+            	STX saveX                           
+                
                 LDA bSidOff
                 BNE ++
-
-                LDA sidOff
-                BNE +
 
 		        LDA #08                            	; register# volume SID VOICE (08 here)
 		        STA AY_ADDR+1		                ; reg#				
@@ -719,9 +701,10 @@ modAN3_2		STA $C05E		                    ; RESET AN3
 ++            	BIT $C404           		        ; IFR b6 cleared by read T1C_1-Lower (T1/6522-1)
                 LDA saveA
             	LDX saveX
-            	LDY saveY
 
 mod_RTI         RTI                                 ; RTI/NOP ($40/$EA)
+
+                STY saveY                           ; save Y used later
 
                 ; SET SID VOICE INT
                 ; ------------------
