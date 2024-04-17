@@ -7,6 +7,7 @@
 ; GROUiK
 ; 04/2024
 ;
+; v0.09 - add full loop (track+effects)
 ; v0.08 - various optimizations
 ; v0.07 - first "finale" version
 ; v0.06 - add color var for effect1 / various improvements (again)
@@ -119,29 +120,29 @@ iREGF       	= $A0
 
 ; effet
 color           = $A1
+saveIntro       = $A2
 ; SID-VOICES specific       
-valV            = $A2
-intL            = $A3
-intH            = $A4
-valEOR          = $A5                           ; toggle for activate SID-VOICES effect
-bSidOff         = $A6                           ; bolean if SID-VOICES on this tick!   
+valV            = $A3
+intL            = $A4
+intH            = $A5
+valEOR          = $A6                           ; toggle for activate SID-VOICES effect
+bSidOff         = $A7                           ; bolean if SID-VOICES on this tick!   
 ; ------------------------------------------------
 ; all ZP variables that need to be initialized to zero are grouped together below!
-ZP_ZERO         = $A7                           ; = same as first address of vars need to be reset
+ZP_ZERO         = $A8                           ; = same as first address of vars need to be reset
 ; ------------------------------------------------
 ; SID_VOICES
-bSIDA           = $A7                       
-sidOff          = $A8
+bSIDA           = $A8                       
+sidOff          = $A9
 
 ; effects
-indexTEX		= $A9                       
-count		    = $AA
-indexLAYER1	    = $AB
-countLAYER1	    = $AC
-indexLAYER2	    = $AD
-countLAYER2	    = $AE
-indexIntro      = $AF
-saveIntro       = $B0
+indexTEX		= $AA                       
+count		    = $AB
+indexLAYER1	    = $AC
+countLAYER1	    = $AD
+indexLAYER2	    = $AE
+countLAYER2	    = $AF
+indexIntro      = $B0
 countIntro      = $B1
 
 ; player PYM / track timing
@@ -291,11 +292,9 @@ Init_MB     	; init Mockingboard (SLOT#4)
                 DEX                                 ; =1 for initial INT
                 STX bSidOff                         
             	DEX                                 ; = 0
-                TXA
-                LDY #14
--               STA ZP_ZERO,Y
-                DEY
-                BPL -
+                STX saveIntro
+                JSR ResetVar
+                
             	; X = 0 - init with pattern 0
             	JSR INIT_PATTERN                    ; init music data with initial parameters
 ; -------------------------------------
@@ -414,19 +413,45 @@ modJSR_PART     JSR EMPTY
 modJSR_PREPA    JSR $FFFF               
                 JMP M_LOOP
                 
+; -------------------------------------------------------------------------------------------------
+ResetVar
+!zone           ; x must be zero here!
+                TXA
+                LDY #13
+-               STA ZP_ZERO,Y
+                DEY
+                BPL -
+                RTS
 ; =================================================================================================
 ; PARTS as subroutines
 ; =================================================================================================
 LOOP_SONG
 !zone
-                DEC indexTTrack                     ; go back to previous timeline index state (to loop indefinitely!)
                 LDA #PATTERNSIZE
             	STA count1Pat
             	LDX #00
-                STX Tick
-                STX Tick+1
-                STX indexPat
-            	JSR INIT_PATTERN                    ; init music data with initial parameters
+                JSR ResetVar                        ; reset effects vars                 
+                JSR INIT_PATTERN                    ; re-init music data with initial parameters
+                ; restore old bar
+                LDX saveIntro                       ; old BAR#
+                LDY #$AA
+                LDA #$55
+                STA $C002                           ; READ MAIN
+                JSR EFFECT_INTRO
+                STA $C003                           ; READ AUX
+                ; reset mode for INTRO again
+                LDA #$0D
+                STA mod80_1+1
+                STA mod80_2+1  
+                LDA #$5E
+                STA modAN3_1+1
+                STA modAN3_2+1 
+                LDA #$55
+                STA modPAGE_1+1
+                STA modPAGE_2+1
+                LDA #$56
+                STA modGFX_1+1
+                STA modGFX_2+1 
                 RTS
 ; -------------------------------------------------------------------------------------------------
 INTRO           ; AUX Color [0x00,0x08,0x01,0x09,0x02,0x0A,0x03,0x0B,0x04,0x0C,0x05,0x0D,0x06,0x0E,0x07,0x0F]
@@ -491,6 +516,10 @@ PREPA_F
                 STA modPAGE_2+1       
                 LDA #$57
                 STA modGFX_1+1                      ; set HGR
+                ; init tex (because of loop!)
+                LDX #>TEX1A
+                LDY #>TEX1M
+                JSR CHANGE_TEX
                 RTS
 ; -------------------------------------------------------------------------------------------------
 PREPA_F2
@@ -549,7 +578,7 @@ PREPA_PARA
 !zone           ; we just need to change high part of OFFSET (tables must be aligned)
                 LDX #>TEX2A
                 LDY #>TEX2M
-                LDA #00
+                LDA #$00
                 STA color
                 JSR CHANGE_TEX                
                 RTS
