@@ -53,7 +53,7 @@ nSector = * + 1
             STX TRACK_TO_REACH            ; track 
             LDA #>MAIN              	; 
             STA BUFFER+1            	; buffer high = $D00
-            LDA #23			            ; (WARNING 1 sector = 128 bytes)          
+            LDA #25			            ; (WARNING 1 sector = 128 bytes)          
             STA COUNT_TOTAL
 		    LDA #$FF
 		    STA State_Loader              

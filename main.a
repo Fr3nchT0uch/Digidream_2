@@ -7,6 +7,7 @@
 ; GROUiK
 ; 04/2024
 ;
+; v0.12 - use of double INT for open DGR "window" -> smaller white parts to mask swith between HGR/DGR / first move to IIc possible compatibility
 ; v0.11 - hgr gfx modified / player improvement
 ; v0.10 - various optimizations (again)
 ; v0.09 - add full loop (track+effects)
@@ -151,6 +152,9 @@ indexPat    	= $B1
 indexTTrack     = $B2
 Tick        	= $B3   ; +$B4
 
+; SID_VOICES
+bInt            = $B5
+
 ; WARNING: do not reach $CC
 ; =================================================================================================
 MAIN
@@ -220,17 +224,12 @@ MAIN
             	STA COUNT_TOTAL     
             	JSR FLOAD
 		        
-                ; fill PAGE1 DLORES with WHITE color
-                ; AUX
-                LDY #00
-                LDX #$04
-                LDA #$FF                        
-.mod0           STA $400,Y
-                INY
-                BNE .mod0
-                INC .mod0+2
-                DEX
-                BNE .mod0
+                ; write ONE line GR (AUX part)
+                LDA #$FF
+                LDY #$27                    
+-               STA $4A8,Y
+                DEY
+                BPL -
 
                 STA $C004 		                    ; write MAIN          
                 
@@ -242,7 +241,7 @@ MAIN
 		        STA FIRSTSEC 
                 LDA #$60            		
                 STA BUFFER+1        
-                LDA #55                                                  
+                LDA #59                                                  
                 STA COUNT_TOTAL     
                 JSR FLOAD
 
@@ -256,15 +255,13 @@ MAIN
 		        STA $C05E		                    ; RESET AN3
 
                 STA $C004                           ; WRITE MAIN
-                ; MAIN
-                LDX #$04
-                LDA #$FF                    
-.mod2           STA $400,Y
-                INY
-                BNE .mod2
-                INC .mod2+2
-                DEX
-                BNE .mod2
+
+                ; write ONE line GR (MAIN part)
+                LDA #$FF
+                LDY #$27                    
+-               STA $4A8,Y
+                DEY
+                BPL -
                 ; ---------------------------------------
 
                 STA $C003                           ; READ AUX ($200-$BFFF) - for Music Data
@@ -294,6 +291,7 @@ Init_MB     	; init Mockingboard (SLOT#4)
                 STX bSidOff                         
             	DEX                                 ; = 0
                 STX saveIntro
+                STX bInt    
                 JSR ResetVar
                 
             	; X = 0 - init with pattern 0
@@ -312,9 +310,10 @@ Init_INT    	; init interrupt
             	LDA #%01000000      		        ; 
             	STA $C40B           		        ; Auxiliary Control Register 6522-1 [T1/6522-1 Continuous Interrupt (FREE MODE) / PB7 disabled / T2 One Shot Mode]
                 STA $C48B
-            	LDA #%11000000      		        ; 
-            	STA $C40E           		        ; Interrupt Enable Register [6522-1 Enable Timer 1 INT / Timer 2 INT Disabled]
-                STA $C48E                           ; Interrupt Enable Register [6522-2 Enable Timer 1 INT / Timer 2 INT Disabled]
+            	LDA #%11100000      		        ; 
+            	STA $C40E           		        ; Interrupt Enable Register [6522-1 Enable Timer 1 INT AND Timer 2 INT Enabled]
+                LDA #%10000000  
+                STA $C48E                           ; Interrupt Enable Register [6522-2 Enable Timer 1 AND Timer 2 INT Disabled]
                 
                 ; wait for DISPLAY
 -           	LDA VERTBLANK
@@ -326,24 +325,29 @@ Init_INT    	; init interrupt
                 LDY #75
                 JSR WAIT65                          ; wait Y lines (first part of HGR)
 
-                ; set 6522-2/T1 - sync code for beginning DGR window
+                ; set 6522-1/T2 INT delay - sync code for beginning DGR window
                 LDX #$36                                                        
             	LDY #$4F                            ; one full PAL frame (20280-2)                                                                  
-            	STX $C484                   		; T2C_1-Lower                    
-            	STY $C485                   		; T2C_1-High  (+reset interrupt flag)
+            	STX $C408                   		; T2C_1-Lower                    
+            	STY $C409                   		; T2C_1-High  (+reset interrupt flag)
 
-                LDY #90
+                HEIGHT = 90                         ; lines/height of DGR window
+                DELAY1 = HEIGHT*65-2                ; nb of cyles for DGR window (minus 2 for INT)
+                DELAY2 = (192+50+70-HEIGHT)*65-2    ; nb of cycles of the rest of the frame (display+vbl-window) (minus 2) 
+
+                LDY #HEIGHT
                 JSR WAIT65                          ; wait Y lines (DGR window "height")
 
-                ; init MAIN TIMER: PLAYER PYM (T2/6522-1)
+
+                ; init MAIN TIMER: PLAYER PYM (T2/6522-2)
                 ; 50Hz PAL Delay : 20280-2 = 20278
                 LDX #$36                                                        
             	LDY #$4F                                                                   
-            	STX $C408                   		; T2C_1-Lower                    
-            	STY $C409                   		; T2C_1-High  (+reset interrupt flag)                      
+            	STX $C488                   		; T2C_1-Lower                    
+            	STY $C489                   		; T2C_1-High  (+reset interrupt flag)                      
                 
                 ; set 6522-1/T1 first INTERRUPT (initial SID VOICE TIMER - value not really matter here)
-                INT1_INIT_DELAY = 700               
+                INT1_INIT_DELAY = 10000               
                 LDA #<INT1_INIT_DELAY
                 STA $C404
                 LDA #>INT1_INIT_DELAY
@@ -351,27 +355,21 @@ Init_INT    	; init interrupt
                 
                 CLI  
 ; =================================================== 
-                ; MAIN LOOP  
-M_LOOP           
+M_LOOP          ; MAIN LOOP   
     		    LDA #%00100000 
-LOOP        	BIT $C40D                  
-            	BEQ LOOP                    		; test IFR bit5 -> T2 timer reaches 0 (T2/6522-1)              		
+LOOP        	BIT $C48D                  
+            	BEQ LOOP                    		; test IFR bit5 -> T2 timer reaches 0 (T2/6522-2)              		
             	
-            	; (re)fill registers for TIMER 2 (no INT here) - T2/6522-1  
+            	; (re)fill registers for TIMER 2 (no INT here) - T2/6522-2  
                 SEI                                 ; disable INT to "stabilize" DGR window
                 LDA #($36-14)                       ; 14 = empirical value!
                 SEC                                 ; compute new delay value (minus cycles already passed)
-                ADC $C408                           ; SEC/negative value here (counter = $FFXX)
-                STA $C408
+                ADC $C488                           ; SEC/negative value here (counter = $FFXX)
+                STA $C488
                 LDA #$4F
-                ADC $C409         
-            	STA $C409                   		; write T2C_1-High          
+                ADC $C489         
+            	STA $C489                   		; write T2C_1-High          
             
-                ; set HGR window (start)            ; note: HGR disabled/DGR enabled for INTRO so following parameters:
-mod80_1         STA $C00D                           ; $C00D = 80 col ON / $C00C = 80 col OFF
-modAN3_1        STA $C05E                           ; $C05E = RESET AN3 / $C05F = SET AN3
-modPAGE_1       BIT $C055                           ; PAGE 2 / PAGE 1
-modGFX_1        BIT $C056                           ; GR / HGR (again)
                 CLI                                 ; enable INT after switch to HGR again
                 
 modJSR_PART     JSR EMPTY
@@ -495,7 +493,7 @@ PREPA_CRED
 ; -------------------------------------------------------------------------------------------------
 PREPA_F
 !zone
-                LDA #$FF
+                LDA #$00
                 STA color
                 LDA #$0C
                 STA mod80_1+1                       ; set $C00C = 80 col ON
@@ -515,6 +513,8 @@ PREPA_F
 PREPA_F2
 !zone
                 ; we just need to change high part of OFFSET (tables must be aligned)
+                LDA #$FF
+                STA color
                 LDX #>TEX1A
                 LDY #>TEX1M
                 JSR CHANGE_TEX
@@ -559,6 +559,8 @@ CHANGE_TEX
 ; -------------------------------------------------------------------------------------------------
 PREPA_T
 !zone           ; we just need to change high part of OFFSET (tables must be aligned)
+                LDA #00
+                STA color
                 LDX #>TEX3A
                 LDY #>TEX3M
                 JSR CHANGE_TEX
@@ -568,8 +570,6 @@ PREPA_PARA
 !zone           ; we just need to change high part of OFFSET (tables must be aligned)
                 LDX #>TEX2A
                 LDY #>TEX2M
-                LDA #$00
-                STA color
                 JSR CHANGE_TEX                
                 RTS
 ; -------------------------------------------------------------------------------------------------
@@ -577,8 +577,6 @@ PREPA_PARA2
 !zone           ; we just need to change high part of OFFSET (tables must be aligned)
                 LDX #>TEX2A
                 LDY #>TEX2M
-                LDA #$00
-                STA color
                 JSR CHANGE_TEX                
                 RTS
 ; -------------------------------------------------------------------------------------------------
@@ -664,15 +662,50 @@ INT_ROUT
         	    BIT $C40D                           ; bit6 IFR -> V - if set, Timer1 = 0 so int occured      
                 BVS .int_sid   
                 
-                ; else 6522-2/T1
+                ; else 6522-1/T2 INT (sync)
 .int_sync       
                 ; set DGR windows (start)
+                STA saveA
+                LDA bInt
+                BNE +
+
+                ; INT for Ending of DGR window
 modGFX_2        BIT $C056                           ; (D)GR
 modPAGE_2       BIT $C055                           ; PAGE 2/1
 mod80_2         STA $C00D		                    ; 80 colonnes
 modAN3_2		STA $C05E		                    ; RESET AN3
-                
-                BIT $C484                           ; reset IFR (6522-2)
+
+                ; set new delay
+                LDA #(<DELAY1-14)                   ; 14 = empirical value!
+                SEC                                 ; compute new delay value (minus cycles already passed)
+                ADC $C408                           ; SEC/negative value here (counter = $FFXX)
+                STA $C408
+                LDA #>DELAY1
+                ADC $C409         
+            	STA $C409                   		; write T2C_1-High
+                LDA #01
+                STA bInt
+                JMP .quit_intsync
+                ; ----------------------------------
+                ; INT for beginning of DGR window
++                                                   ; note: HGR disabled/DGR enabled for INTRO so following parameters:
+mod80_1         STA $C00D                           ; $C00D = 80 col ON / $C00C = 80 col OFF
+modAN3_1        STA $C05E                           ; $C05E = RESET AN3 / $C05F = SET AN3
+modPAGE_1       BIT $C055                           ; PAGE 2 / PAGE 1
+modGFX_1        BIT $C056                           ; GR / HGR (again)
+
+                ; set new delay
+                LDA #(<DELAY2-14)                   ; 14 = empirical value!
+                SEC                                 ; compute new delay value (minus cycles already passed)
+                ADC $C408                           ; SEC/negative value here (counter = $FFXX)
+                STA $C408
+                LDA #>DELAY2
+                ADC $C409         
+            	STA $C409                   		; write T2C_1-High
+                LDA #00
+                STA bInt
+                ; ----------------------------------
+.quit_intsync   LDA saveA
                 RTI
 
 .int_sid        ; 6522-1/T1 INT occured / SID VOICE effect
@@ -734,8 +767,8 @@ PLAYER_PYM
                 LDA #00
                 STA bSIDA                           ; reset for each frame
 
-                SEI                                 ; inib INT while changing AY REGISTERS
-                ; -------------------------------------
+                SEI                                 ; inib INT while changing ANY AY REGISTERS (or while reading INT info from RE/RF)
+                ; ----------------------------------
                 ; "REGISTER" F       		        ; containing high INT delay value
         		LDY vREGF                           
                 BMI .noSid                          ; if bit 7 = 1, SID VOICE off this frame (no need to load intL)                       
@@ -889,7 +922,7 @@ mod_comp_intH   CPY #00                             ; compare to last int delay 
                 SEI
 
         		; REGISTER 8
-                LDA bSIDA                   ; skip if this voice is used for SID_VOICES
+                LDA bSIDA                   ; skip if this voice is used for SID_VOICES this frame
                 BNE ++
         		LDA #$08
 		        STA AY_ADDR+1
