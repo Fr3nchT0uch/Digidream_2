@@ -7,6 +7,7 @@
 ; GROUiK
 ; 04/2024
 ;
+; v0.13 - using VBL detection for Main_Loop + add specific code for IIc (commented for now)
 ; v0.12 - use of double INT for open DGR "window" -> smaller white parts to mask swith between HGR/DGR / first move to IIc possible compatibility
 ; v0.11 - hgr gfx modified / player improvement
 ; v0.10 - various optimizations (again)
@@ -33,8 +34,15 @@
 ; =============================================================================
 ; SYSTEM/CONSTANT
 VERTBLANK       = $C019 ;
+
+VSYNCdisable	= $C05A	    ; (WR) (IIc)
+VSYNCenable	    = $C05B	    ; (WR) (IIc)
+VSYNCIRFreset	= $C070     ; (WR) (IIc)
+IOUdisable	    = $C078	    ; (W)
+IOUenable	    = $C079	    ; (W)
 ; =============================================================================
-; ZERO PAGE individual
+; ZERO PAGE
+bIIc            = $10
 
 ; decompLZ4
 src1        	= $30   	; +$31
@@ -299,7 +307,7 @@ Init_MB     	; init Mockingboard (SLOT#4)
 ; -------------------------------------
 Init_INT    	; init interrupt
 !zone       
-            	; pour IIe 
+            	; SET INT routine address
             	LDA #<INT_ROUT
             	STA $FFFE       
             	LDA #>INT_ROUT
@@ -314,12 +322,34 @@ Init_INT    	; init interrupt
             	STA $C40E           		        ; Interrupt Enable Register [6522-1 Enable Timer 1 INT AND Timer 2 INT Enabled]
                 LDA #%10000000  
                 STA $C48E                           ; Interrupt Enable Register [6522-2 Enable Timer 1 AND Timer 2 INT Disabled]
+
                 
+                ; ==========================================================
+                ; CODE FOR IIc version 
+                ; ==========================================================
+                ; enable IIc VSYNC interrupt
+	            ;STA IOUenable	                    ; (IIc specific) enable IOU access
+ 	            ;STA VSYNCenable	                    ; (IIc specific) enable VBL INT
+ 	            ;STA IOUdisable	                    ; (IIc specific) disable IOU access
+	            ;LDA VSYNCIRFreset	                ; (IIc specific) reset VSYNC IRF
+
+                ; wait for DISPLAY
+                ;- LDA VERTBLANK                      ; wait for start of VBL (IIc specific)
+                ;BPL - 
+                ;LDA VSYNCIRFreset	                 ; (IIc specific) reset VSYNC IRF
+                ;LDY #120                            ; WAIT 120 (70+50 = PAL VBL lines)                            
+                ;JSR WAIT65
+                ; ==========================================================
+
+                ; ==========================================================
+                ; CODE FOR IIe version 
+                ; ==========================================================
                 ; wait for DISPLAY
 -           	LDA VERTBLANK
             	BMI -        
 -           	LDA VERTBLANK
-            	BPL -                       		; wait until next DISPLAY on
+            	BPL -                       		; wait until next DISPLAY
+                ; ==========================================================
 
                 ; here "beginning" of DISPLAY (no need to be more precise)
                 LDY #75
@@ -336,15 +366,7 @@ Init_INT    	; init interrupt
                 DELAY2 = (192+50+70-HEIGHT)*65-2    ; nb of cycles of the rest of the frame (display+vbl-window) (minus 2) 
 
                 LDY #HEIGHT
-                JSR WAIT65                          ; wait Y lines (DGR window "height")
-
-
-                ; init MAIN TIMER: PLAYER PYM (T2/6522-2)
-                ; 50Hz PAL Delay : 20280-2 = 20278
-                LDX #$36                                                        
-            	LDY #$4F                                                                   
-            	STX $C488                   		; T2C_1-Lower                    
-            	STY $C489                   		; T2C_1-High  (+reset interrupt flag)                      
+                JSR WAIT65                          ; wait Y lines (DGR window "height")               
                 
                 ; set 6522-1/T1 first INTERRUPT (initial SID VOICE TIMER - value not really matter here)
                 INT1_INIT_DELAY = 10000               
@@ -356,27 +378,33 @@ Init_INT    	; init interrupt
                 CLI  
 ; =================================================== 
 M_LOOP          ; MAIN LOOP   
-    		    LDA #%00100000 
-LOOP        	BIT $C48D                  
-            	BEQ LOOP                    		; test IFR bit5 -> T2 timer reaches 0 (T2/6522-2)              		
-            	
-            	; (re)fill registers for TIMER 2 (no INT here) - T2/6522-2  
-                SEI                                 ; disable INT to "stabilize" DGR window
-                LDA #($36-14)                       ; 14 = empirical value!
-                SEC                                 ; compute new delay value (minus cycles already passed)
-                ADC $C488                           ; SEC/negative value here (counter = $FFXX)
-                STA $C488
-                LDA #$4F
-                ADC $C489         
-            	STA $C489                   		; write T2C_1-High          
-            
-                CLI                                 ; enable INT after switch to HGR again
-                
-modJSR_PART     JSR EMPTY
-            	
+    		    
+                ; ==========================================================
+                ; CODE FOR IIc version 
+                ; ==========================================================
+                ;- LDA VERTBLANK                      ; wait for start of VBL (IIc specific)
+                ;BPL - 
+                ;LDA VSYNCIRFreset	                 ; (IIc specific) reset VSYNC IRF
+                ; ==========================================================
+
+                ; ==========================================================
+                ; CODE FOR IIe version 
+                ; ==========================================================
+                ; wait for VBL
+-           	LDA VERTBLANK
+            	BPL -                               ; wait until next DISPLAY
+-           	LDA VERTBLANK
+            	BMI -                       		; wait until next VBL
+                ; ==========================================================
+
                 ; play one tick
             	JSR PLAYER_PYM
-            	INC Tick                    		; inc frame counter                                             
+
+                ; effect part
+modJSR_PART     JSR EMPTY
+            	
+                ; ; inc frame counter / check timeline
+            	INC Tick                    		                                       
             	BNE +                                                                               
             	INC Tick+1                                                                  
 +           	LDA Tick
@@ -676,13 +704,13 @@ mod80_2         STA $C00D		                    ; 80 colonnes
 modAN3_2		STA $C05E		                    ; RESET AN3
 
                 ; set new delay
-                LDA #(<DELAY1-14)                   ; 14 = empirical value!
+                LDA #(<DELAY1-14)                   ; 14 => (LDA+SEC+ADC+STA=12 to substract) - 2 (6522/timer)
                 SEC                                 ; compute new delay value (minus cycles already passed)
                 ADC $C408                           ; SEC/negative value here (counter = $FFXX)
                 STA $C408
                 LDA #>DELAY1
                 ADC $C409         
-            	STA $C409                   		; write T2C_1-High
+            	STA $C409                   		; write T2C_1-High / reset IFR
                 LDA #01
                 STA bInt
                 JMP .quit_intsync
@@ -695,13 +723,13 @@ modPAGE_1       BIT $C055                           ; PAGE 2 / PAGE 1
 modGFX_1        BIT $C056                           ; GR / HGR (again)
 
                 ; set new delay
-                LDA #(<DELAY2-14)                   ; 14 = empirical value!
+                LDA #(<DELAY2-14)                   ; 14 = (LDA+SEC+ADC+STA=12 to substract) - 2 (6522/timer)
                 SEC                                 ; compute new delay value (minus cycles already passed)
                 ADC $C408                           ; SEC/negative value here (counter = $FFXX)
                 STA $C408
                 LDA #>DELAY2
                 ADC $C409         
-            	STA $C409                   		; write T2C_1-High
+            	STA $C409                   		; write T2C_1-High / reset IFR
                 LDA #00
                 STA bInt
                 ; ----------------------------------
