@@ -94,8 +94,8 @@ MAME:
 ## APPLE IIE 50HZ (UK) + MCK SLOT4 (default)
 #	$(MAME)\mame.exe -skip_gameinfo -window -resolution0 800x800 -rompath $(MAME)\roms apple2euk -flop1 $(DISK)
 
-# APPLE IIC + Mockingboard Slot4
-	$(MAME)\mame.exe -window -resolution0 800x800 -debug -debugger_font_size 12 -nomouse -rompath $(MAME)\roms apple2c -flop1 $(DISK)
+# APPLE IIC + Mockingboard Slot4 (default) + DEBUG
+	$(MAME)\mame.exe -window -resolution0 800x800 -debug -debugger_font_size 12 -nomouse -uimodekey CAPSLOCK -rompath $(MAME)\roms apple2c -flop1 $(DISK)
 
 ## APPLE IIE 50HZ (UK) + MCK SLOT4 (default) + DEBUG
 ###	$(MAME)\mame.exe -skip_gameinfo -window -resolution0 800x800 -debug -debugger_font_size 12 -rompath $(MAME)\roms apple2euk -flop1 $(DISK)

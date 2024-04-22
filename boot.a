@@ -54,7 +54,7 @@ nSector = * + 1
             STX TRACK_TO_REACH            ; track 
             LDA #>MAIN              	; 
             STA BUFFER+1            	; buffer high = $D00
-            LDA #25			            ; (WARNING 1 sector = 128 bytes)          
+            LDA #24			            ; (WARNING 1 sector = 128 bytes)          
             STA COUNT_TOTAL
 		    LDA #$FF
 		    STA State_Loader              
@@ -70,7 +70,7 @@ INIT	    JSR $FC58			        ; HOME (ROM)
             LDA #$FF
         	STA $C403       		    ; if IIc, activate MB4C
         	STA $C404
-            LDX #$80                    ; IIc "value"
+            LDX #$80                    ; IIc ON "value"
 +           STX bIIc                    ; = $80 if IIc / 00 if IIe
             ; *** added to prevent issue during fload if Reboot with CTRL-OA-RESET during INT active (INT are NOT reset)
             ; => first CLI encountered during fload re-enable previous INT
@@ -106,7 +106,7 @@ MODJING		LDA #$07
 		    BNE --
 		    ; ---------------------
 
-		    ; Loading FLOAD (with DISK ROM)
+		    ; Loading FLOAD (using DISK II ROM)
 		    LDA $C083
 		    LDA $C083			        ; write/read to RAM bank2 (Langage Card)
 		    LDA #$CE			        ; $801 => DEC nSector
