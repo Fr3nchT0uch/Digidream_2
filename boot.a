@@ -18,7 +18,7 @@
 MAIN        	= $D000
 ; =============================================================================
 ; ZERO PAGE 
-bIIc            = $10
+bIIc            = $10                   ; IIc or not IIc!
 Temp            = $FF
 ; =============================================================================
 
@@ -54,7 +54,7 @@ nSector = * + 1
             STX TRACK_TO_REACH            ; track 
             LDA #>MAIN              	; 
             STA BUFFER+1            	; buffer high = $D00
-            LDA #23			            ; (WARNING 1 sector = 128 bytes)          
+            LDA #25			            ; (WARNING 1 sector = 128 bytes)          
             STA COUNT_TOTAL
 		    LDA #$FF
 		    STA State_Loader              
@@ -64,17 +64,17 @@ nSector = * + 1
 
 INIT	    JSR $FC58			        ; HOME (ROM)
 	
-            LDX $FBC0                   ; check if prog is running on a IIc
+            LDX $FBC0                   ; check if prog is running on a IIc (check method is OK for the goal here)
             BNE +
-		    LDA #$FF
-        	STA $C403       		    ; activate MB 4c (if IIc)
+            LDA #$FF
+        	STA $C403       		    ; if IIc, activate MB4C
         	STA $C404
-+           STX bIIc                    ; = 0 if IIc / !=0 if IIe (enough here)
++           STX bIIc                    ; = 0 if IIc / !=0 if IIe 
             ; *** added to prevent issue during fload if Reboot with CTRL-OA-RESET during INT active (INT are NOT reset)
             ; => first CLI encountered during fload re-enable previous INT
             LDA #%01100000      		; disable all INT (T1/T2/6522-1/2)   
             STA $C40E           		; VIA_IER/1                    
-            STA $C48E                   ; VIA_IER/2
+            ;STA $C48E                   ; VIA_IER/2
             ; ***
 		
 		    ; Text

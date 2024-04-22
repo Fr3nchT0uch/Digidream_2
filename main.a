@@ -7,6 +7,7 @@
 ; GROUiK
 ; 04/2024
 ;
+; v0.14 - IIc compatibility added (bugged for now!)
 ; v0.13 - using VBL detection for Main_Loop + add specific code for IIc (commented for now)
 ; v0.12 - use of double INT for open DGR "window" -> smaller white parts to mask swith between HGR/DGR / first move to IIc possible compatibility
 ; v0.11 - hgr gfx modified / player improvement
@@ -35,11 +36,11 @@
 ; SYSTEM/CONSTANT
 VERTBLANK       = $C019 ;
 
-VSYNCdisable	= $C05A	    ; (WR) (IIc)
-VSYNCenable	    = $C05B	    ; (WR) (IIc)
-VSYNCIRFreset	= $C070     ; (WR) (IIc)
-IOUdisable	    = $C078	    ; (W)
-IOUenable	    = $C079	    ; (W)
+DISVBL	        = $C05A	    ; (WR) (IIc)
+ENVBL   	    = $C05B	    ; (WR) (IIc)
+VBLCLR	        = $C070     ; (WR) (IIc)
+IOUDSBL 	    = $C078	    ; (W)
+IOUENBL 	    = $C079	    ; (W)
 ; =============================================================================
 ; ZERO PAGE
 bIIc            = $10
@@ -307,53 +308,54 @@ Init_MB     	; init Mockingboard (SLOT#4)
 ; -------------------------------------
 Init_INT    	; init interrupt
 !zone       
+                SEI
             	; SET INT routine address
             	LDA #<INT_ROUT
             	STA $FFFE       
             	LDA #>INT_ROUT
             	STA $FFFF
  
-            	SEI                 		        ; inhib
             	; Set INT
             	LDA #%01000000      		        ; 
             	STA $C40B           		        ; Auxiliary Control Register 6522-1 [T1/6522-1 Continuous Interrupt (FREE MODE) / PB7 disabled / T2 One Shot Mode]
-                STA $C48B
             	LDA #%11100000      		        ; 
             	STA $C40E           		        ; Interrupt Enable Register [6522-1 Enable Timer 1 INT AND Timer 2 INT Enabled]
-                LDA #%10000000  
-                STA $C48E                           ; Interrupt Enable Register [6522-2 Enable Timer 1 AND Timer 2 INT Disabled]
-
                 
-                ; ==========================================================
-                ; CODE FOR IIc version 
-                ; ==========================================================
-                ; enable IIc VSYNC interrupt
-	            ;STA IOUenable	                    ; (IIc specific) enable IOU access
- 	            ;STA VSYNCenable	                    ; (IIc specific) enable VBL INT
- 	            ;STA IOUdisable	                    ; (IIc specific) disable IOU access
-	            ;LDA VSYNCIRFreset	                ; (IIc specific) reset VSYNC IRF
+                CLI
 
+                LDA bIIc
+                BNE .IIe
+                ; ==========================================================
+                ; CODE specific FOR IIc
+                ; ==========================================================
+.IIc            ; enable IIc VSYNC interrupt
+	            STA IOUENBL 	                    ; (IIc specific) enable IOU access
+ 	            STA ENVBL   	                    ; (IIc specific) enable VBL INT
+ 	            STA IOUDSBL 	                    ; (IIc specific) disable IOU access
+	            
                 ; wait for DISPLAY
-                ;- LDA VERTBLANK                      ; wait for start of VBL (IIc specific)
-                ;BPL - 
-                ;LDA VSYNCIRFreset	                 ; (IIc specific) reset VSYNC IRF
-                ;LDY #120                            ; WAIT 120 (70+50 = PAL VBL lines)                            
-                ;JSR WAIT65
+-               LDA VERTBLANK                       ; wait for start of VBL (IIc specific) and INT occurs
+                BPL - 
+                LDY #120                            ; then WAIT 120 (PAL: 70+50) lines = VBL delay                            
+                JSR WAIT65
+                JMP .next
                 ; ==========================================================
 
                 ; ==========================================================
-                ; CODE FOR IIe version 
+                ; CODE FOR IIe 
                 ; ==========================================================
-                ; wait for DISPLAY
+.IIe            ; wait for DISPLAY
 -           	LDA VERTBLANK
             	BMI -        
 -           	LDA VERTBLANK
             	BPL -                       		; wait until next DISPLAY
                 ; ==========================================================
 
-                ; here "beginning" of DISPLAY (no need to be more precise)
+.next           ; here "beginning" of DISPLAY (no need to be more precise)
                 LDY #75
                 JSR WAIT65                          ; wait Y lines (first part of HGR)
+
+                SEI
 
                 ; set 6522-1/T2 INT delay - sync code for beginning DGR window
                 LDX #$36                                                        
@@ -378,16 +380,18 @@ Init_INT    	; init interrupt
                 CLI  
 ; =================================================== 
 M_LOOP          ; MAIN LOOP   
-    		    
-                ; ==========================================================
+!zone    		    
+                LDA bIIc
+                BNE .IIe
+.IIc            ; ==========================================================
                 ; CODE FOR IIc version 
                 ; ==========================================================
-                ;- LDA VERTBLANK                      ; wait for start of VBL (IIc specific)
-                ;BPL - 
-                ;LDA VSYNCIRFreset	                 ; (IIc specific) reset VSYNC IRF
+-               LDA VERTBLANK                        ; wait for start of VBL (IIc specific) and INT occurs
+                BPL - 
+                JMP .next
                 ; ==========================================================
 
-                ; ==========================================================
+.IIe            ; ==========================================================
                 ; CODE FOR IIe version 
                 ; ==========================================================
                 ; wait for VBL
@@ -396,7 +400,7 @@ M_LOOP          ; MAIN LOOP
 -           	LDA VERTBLANK
             	BMI -                       		; wait until next VBL
                 ; ==========================================================
-
+.next
                 ; play one tick
             	JSR PLAYER_PYM
 
@@ -690,6 +694,18 @@ INT_ROUT
         	    BIT $C40D                           ; bit6 IFR -> V - if set, Timer1 = 0 so int occured      
                 BVS .int_sid   
                 
+                ; -----------------------------------
+                ; IIc specific
+                STA saveA
+                LDA bIIc
+                BNE .int_sync
+                BIT VERTBLANK                       ; check if VBL INT occured
+                BPL .int_sync                       ; not here because of VBL INT
+                BIT VBLCLR      	                ; otherwise VBL clear (reset INT)
+                LDA saveA                           ; VBL INT (IIc) detected
+                RTI                                 ; exit
+                ; -----------------------------------
+
                 ; else 6522-1/T2 INT (sync)
 .int_sync       
                 ; set DGR windows (start)
