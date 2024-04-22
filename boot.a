@@ -64,12 +64,14 @@ nSector = * + 1
 
 INIT	    JSR $FC58			        ; HOME (ROM)
 	
-            LDX $FBC0                   ; check if prog is running on a IIc (check method is OK for the goal here)
+            LDX #00
+            LDA $FBC0                   ; check if prog is running on a IIc (check method is OK for the goal here)
             BNE +
             LDA #$FF
         	STA $C403       		    ; if IIc, activate MB4C
         	STA $C404
-+           STX bIIc                    ; = 0 if IIc / !=0 if IIe 
+            LDX #$80                    ; IIc "value"
++           STX bIIc                    ; = $80 if IIc / 00 if IIe
             ; *** added to prevent issue during fload if Reboot with CTRL-OA-RESET during INT active (INT are NOT reset)
             ; => first CLI encountered during fload re-enable previous INT
             LDA #%01100000      		; disable all INT (T1/T2/6522-1/2)   

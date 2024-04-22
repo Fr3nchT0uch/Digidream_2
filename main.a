@@ -7,6 +7,7 @@
 ; GROUiK
 ; 04/2024
 ;
+; v0.15 - IIc compatibilité fixed (thx to fenarinarsa!)
 ; v0.14 - IIc compatibility added (bugged for now!)
 ; v0.13 - using VBL detection for Main_Loop + add specific code for IIc (commented for now)
 ; v0.12 - use of double INT for open DGR "window" -> smaller white parts to mask swith between HGR/DGR / first move to IIc possible compatibility
@@ -34,7 +35,7 @@
 
 ; =============================================================================
 ; SYSTEM/CONSTANT
-VERTBLANK       = $C019 ;
+VERTBLANK       = $C019     ;
 
 DISVBL	        = $C05A	    ; (WR) (IIc)
 ENVBL   	    = $C05B	    ; (WR) (IIc)
@@ -43,7 +44,8 @@ IOUDSBL 	    = $C078	    ; (W)
 IOUENBL 	    = $C079	    ; (W)
 ; =============================================================================
 ; ZERO PAGE
-bIIc            = $10
+bIIc            = $10       ; = $80 if IIc / $00 if IIe
+bINTIIc         = $11
 
 ; decompLZ4
 src1        	= $30   	; +$31
@@ -324,7 +326,7 @@ Init_INT    	; init interrupt
                 CLI
 
                 LDA bIIc
-                BNE .IIe
+                BPL .IIe
                 ; ==========================================================
                 ; CODE specific FOR IIc
                 ; ==========================================================
@@ -338,6 +340,8 @@ Init_INT    	; init interrupt
                 BPL - 
                 LDY #120                            ; then WAIT 120 (PAL: 70+50) lines = VBL delay                            
                 JSR WAIT65
+                LDA #00
+                STA bINTIIc                         ; init to zero (IIc only)
                 JMP .next
                 ; ==========================================================
 
@@ -382,12 +386,13 @@ Init_INT    	; init interrupt
 M_LOOP          ; MAIN LOOP   
 !zone    		    
                 LDA bIIc
-                BNE .IIe
+                BPL .IIe
 .IIc            ; ==========================================================
                 ; CODE FOR IIc version 
                 ; ==========================================================
--               LDA VERTBLANK                        ; wait for start of VBL (IIc specific) and INT occurs
-                BPL - 
+-               LDA bINTIIc                         ; wait for start of VBL (IIc specific) and INT occurs -> bINTIIc set
+                BEQ - 
+                DEC bINTIIc                         ; reset boolean
                 JMP .next
                 ; ==========================================================
 
@@ -696,13 +701,12 @@ INT_ROUT
                 
                 ; -----------------------------------
                 ; IIc specific
-                STA saveA
-                LDA bIIc
-                BNE .int_sync
+                BIT bIIc                            ; $80 ? so IIc here...
+                BPL .int_sync                       ; else another INT
                 BIT VERTBLANK                       ; check if VBL INT occured
                 BPL .int_sync                       ; not here because of VBL INT
                 BIT VBLCLR      	                ; otherwise VBL clear (reset INT)
-                LDA saveA                           ; VBL INT (IIc) detected
+                INC bINTIIc                         ; set bINTIIc
                 RTI                                 ; exit
                 ; -----------------------------------
 
