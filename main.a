@@ -4,9 +4,10 @@
 ;
 ; DIGIDREAM 2 aka SID VOICE EDITION
 ; [FRENCH TOUCH]
-; GROUiK
+; GROUiK/fenarinarsa
 ; 04/2024
 ;
+; v0.17 - INT routine optimization (fixed volume issue -> thx to fenarinarsa!) / Add another effect part / fix Music data file issue
 ; v0.16 - pages align + various optimizations 
 ; v0.15 - IIc compatibility fixed (thx to fenarinarsa!)
 ; v0.14 - IIc compatibility added (bugged for now!)
@@ -182,7 +183,7 @@ MAIN
 		        STA FIRSTSEC 
                 LDA #$10            		
                 STA BUFFER+1        
-                LDA #95                     
+                LDA #93                     
                 STA COUNT_TOTAL     
                 JSR FLOAD         		
 
@@ -297,9 +298,7 @@ Init_MB     	; init Mockingboard (SLOT#4)
                 ; init var
             	LDA #PATTERNSIZE
             	STA count1Pat
-                LDX #02
-		        STX countLAYER1
-                DEX                                 ; =1 for initial INT
+                LDX #01
                 STX bSidOff                         
             	DEX                                 ; = 0
                 STX saveIntro
@@ -382,7 +381,7 @@ Init_INT    	; init interrupt
                 LDA #>INT1_INIT_DELAY
                 STA $C405
                 
-                CLI  
+                CLI 
 ; =================================================== 
 M_LOOP          ; MAIN LOOP   
 !zone    		    
@@ -455,7 +454,8 @@ LOOP_SONG
 !zone
                 LDA #PATTERNSIZE
             	STA count1Pat
-                JSR ResetVar                        ; reset effects vars                 
+                JSR ResetVar                        ; reset effects vars
+                TAX                                 ; = 0 here                 
                 JSR INIT_PATTERN                    ; re-init music data with initial parameters
                 ; restore old bar
                 LDX saveIntro                       ; old BAR#
@@ -540,7 +540,7 @@ PREPA_F
                 LDA #$57
                 STA modGFX_1+1                      ; set HGR
                 ; init tex (because of loop!)
-                LDX #>TEX1A
+END_PF          LDX #>TEX1A                         ; high part only
                 LDY #>TEX1M
                 JSR CHANGE_TEX
                 RTS
@@ -550,9 +550,7 @@ PREPA_F2
                 ; we just need to change high part of OFFSET (tables must be aligned)
                 LDA #$FF
                 STA color
-                LDX #>TEX1A
-                LDY #>TEX1M
-                JSR CHANGE_TEX
+                JMP END_PF
                 RTS
 ; ------------------------------------------------------------------------------------------------
 CHANGE_TEX
@@ -596,10 +594,15 @@ PREPA_T
 !zone           ; we just need to change high part of OFFSET (tables must be aligned)
                 LDA #00
                 STA color
-                LDX #>TEX3A
+END_PT          LDX #>TEX3A
                 LDY #>TEX3M
                 JSR CHANGE_TEX
                 RTS
+; -------------------------------------------------------------------------------------------------
+PREPA_T2
+                LDA #$FF
+                STA color
+                JMP END_PT
 ; -------------------------------------------------------------------------------------------------
 PREPA_PARA
 !zone           ; we just need to change high part of OFFSET (tables must be aligned)
@@ -800,8 +803,10 @@ mod_RTI         RTI                                 ; RTI/NOP ($40/$EA)
                 STA mod_RTI
 
                 LDA vREG8                           ; set new value for valV and valEOR from sid_voice vol
-                STA valEOR
-                STA valV
+                LDX valV
+                BEQ +                               ; if valv = 0 we don't change vol for next INT, just valEOR
+                STA valV                            ; because we don't want two consecutive values of "non-zero" vol 
++               STA valEOR
 
                 LDA saveA
             	LDX saveX
@@ -888,9 +893,6 @@ mod_comp_intH   CPY #00                             ; compare to last int delay 
 		        STA AY_ADDR+1	
 		        STY AY_ADDR
 		        STX AY_ADDR
-		
-                CLI
-                SEI
 
          		; REGISTER 3
         		LDA #$03
@@ -918,9 +920,6 @@ mod_comp_intH   CPY #00                             ; compare to last int delay 
 		        STA AY_ADDR+1	
 		        STY AY_ADDR
 		        STX AY_ADDR
-
-                CLI
-                SEI
 
          		; REGISTER 5
         		LDA #$05
@@ -1554,47 +1553,47 @@ EO_CODE
 AY_ADDR         = $C400        ; AY1 = $C400 / AY2 = $C480 (MB SLOT#4)
 
 PATTERNSIZE     = 64           
-NBPATTERNS      = 269          
-FRAMEMAX        = 17153
+NBPATTERNS      = 256          
+FRAMEMAX        = 16384
 
 D_REG0 = $1000
-D_REG1 = $32F8
-D_REG2 = $36C8
-D_REG3 = $4976
-D_REG4 = $4D30
-D_REG5 = $523E
-D_REG6 = $566A
-D_REG7 = $596E
-D_REG8 = $630C
-D_REG9 = $7414
-D_REGA = $823A
-D_REGB = $8598
-D_REGD = $8B6E
-D_REGE = $8DAE
-D_REGF = $AF2C
+D_REG1 = $30F6
+D_REG2 = $34A2
+D_REG3 = $454E
+D_REG4 = $48E6
+D_REG5 = $4DDA
+D_REG6 = $51EC
+D_REG7 = $54D0
+D_REG8 = $5E4E
+D_REG9 = $6F26
+D_REGA = $7D14
+D_REGB = $803A
+D_REGD = $858A
+D_REGE = $87AC
+D_REGF = $A7AA
 
 ; ==================================================================================================
 SCBUFFER 	!fill 30,$00
-;                        0       1          2         3         4        5          6        7          8 
-TablePrepaPartL !byte <EMPTY,<PREPA_F,<PREPA_PARA,<PREPA_F2,<PREPA_T,<PREPA_PARA2,<EMPTY,<PREPA_CRED,<LOOP_SONG                      ; "EMPTY" is just a simple "RTS"
-TablePrepaPartH !byte >EMPTY,>PREPA_F,>PREPA_PARA,>PREPA_F2,>PREPA_T,>PREPA_PARA2,>EMPTY,>PREPA_CRED,>LOOP_SONG
+;                        0       1          2         3         4        5          6        7          8          9
+TablePrepaPartL !byte <EMPTY,<PREPA_F,<PREPA_PARA,<PREPA_F2,<PREPA_T,<PREPA_PARA2,<EMPTY,<PREPA_T2,<PREPA_CRED,<LOOP_SONG        ; "EMPTY" is just a simple "RTS"
+TablePrepaPartH !byte >EMPTY,>PREPA_F,>PREPA_PARA,>PREPA_F2,>PREPA_T,>PREPA_PARA2,>EMPTY,>PREPA_T2,>PREPA_CRED,>LOOP_SONG
 
 !align 255,0
 TEX1 	!byte 0x00,0x00,0x00,0x00,0x80,0x10,0x80,0x30,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x11,0x99,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x01,0x09,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x08,0x11,0x98,0x03,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x11,0x99,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x01,0x09,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x80,0x10,0x80,0x30,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x11,0x99,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x11,0x99,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x08,0x11,0x98,0x03,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x11,0x99,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x01,0x09,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x80,0x10,0x80,0x30,0x00,0x00,0x00,0x00,0x00,0x00,0x08,0x11,0x98,0x03,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x11,0x99,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00
 
-;                        0         1           2          3          4            5           6          7       8
-TablePARTL      !byte <INTRO,<CALL1_EFF1,<CALL2_EFF1,<CALL2_EFF1,<CALL1_EFF1,<CALL1_EFF1,<EFF_SCROLL,<CREDITS,<EMPTY
-TablePARTH      !byte >INTRO,>CALL1_EFF1,>CALL2_EFF1,>CALL2_EFF1,>CALL1_EFF1,>CALL1_EFF1,>EFF_SCROLL,>CREDITS,>EMPTY
+;                        0         1           2          3          4            5           6          7           8      9
+TablePARTL      !byte <INTRO,<CALL1_EFF1,<CALL2_EFF1,<CALL2_EFF1,<CALL1_EFF1,<CALL1_EFF1,<EFF_SCROLL,<CALL2_EFF1,<CREDITS,<EMPTY
+TablePARTH      !byte >INTRO,>CALL1_EFF1,>CALL2_EFF1,>CALL2_EFF1,>CALL1_EFF1,>CALL1_EFF1,>EFF_SCROLL,>CALL2_EFF1,>CREDITS,>EMPTY
 
 
 !align 255,0
 TEX2 	!byte 0x11,0x22,0x31,0x02,0x01,0x06,0x00,0x00,0x00,0x00,0x11,0x22,0x31,0x02,0x03,0x00,0x00,0x00,0x00,0x00,0x00,0x22,0x11,0x62,0x01,0x02,0x03,0x00,0x00,0x00,0x00,0x22,0x11,0x62,0x01,0x06,0x00,0x00,0x00,0x00,0x00,0x00,0x11,0x22,0x31,0x02,0x01,0x06,0x00,0x00,0x00,0x00,0x11,0x22,0x31,0x02,0x03,0x00,0x00,0x00,0x00,0x00,0x00,0x22,0x11,0x62,0x01,0x02,0x03,0x00,0x00,0x00,0x00,0x22,0x11,0x62,0x01,0x06,0x00,0x00,0x00,0x00,0x00,0x00,0x11,0x22,0x31,0x02,0x01,0x06,0x00,0x00,0x00,0x00,0x11,0x22,0x31,0x02,0x03,0x00,0x03,0x00,0x00,0x00,0x00,0x22,0x11,0x62,0x01,0x02,0x00,0x00,0x00,0x00,0x00,0x22,0x11,0x62,0x01,0x06,0x01,0x06,0x00,0x00,0x00,0x00,0x11,0x22,0x31,0x02,0x03,0x00,0x00,0x00,0x00,0x00,0x11,0x22,0x31,0x02,0x01,0x02,0x03,0x00,0x00,0x00,0x00,0x22,0x11,0x62,0x01,0x06,0x00,0x00,0x00,0x00,0x00,0x22,0x11,0x62,0x31,0x02,0x01,0x06,0x00,0x00,0x00,0x00,0x11,0x22,0x31,0x02,0x03,0x00,0x00,0x00,0x00,0x00,0x11,0x22,0x11,0x62,0x01,0x02,0x03,0x00,0x00,0x00,0x00,0x22,0x11,0x62,0x01,0x06,0x00,0x00,0x00,0x00,0x00,0x22
 
 ; tick at xs = x*50
-;                   0       1     2     3    4     5     6     7        8        
-;                  10.3   20.5  30.7  40.9  51.2  71,7  93.1 133.2 
-TimeLineL !byte <(515-8),<1025,<1535,<2048,<2560,<3585,<4655,<6660,<(FRAMEMAX-1)
-TimeLineH !byte >(515-8),>1025,>1535,>2048,>2560,>3585,>4655,>6660,>(FRAMEMAX-1)
+;                   0       1     2     3    4     5     6     7     8        9        
+;                  10.3   20.5  30.7  40.9  51.2  71,7  93.1 113.6 133.2 
+TimeLineL !byte <(515-8),<1025,<1535,<2048,<2560,<3585,<4655,<5680,<6660,<(FRAMEMAX)
+TimeLineH !byte >(515-8),>1025,>1535,>2048,>2560,>3585,>4655,>5680,>6660,>(FRAMEMAX)
 
 TableIntro !byte 4,8,0,2,7,1,5,6,3,7
 
