@@ -2,13 +2,14 @@
 
 An Apple II Musidisk by French Touch featuring one great track from Mad Max using Sid Voice Effect!
 
-v0.80 - 05/2024  
+v0.80 - 19/05/2024  
    
 **music:** JOCHEN 'Mad Max' HIPPEL   
 
 **code:** GROUiK  
 **gfx:** GROUiK  
 
+_Special thanks to __Ben/The Overlanders__ for his time in helping to understand how Sid-Voices really work!_
 
 **Web**  
 http://fr3nch.t0uch.free.fr/DD2/DD2.html 
