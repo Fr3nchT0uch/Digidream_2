@@ -2,28 +2,12 @@
 ; 
 ; [binary MAX Size: $D000-$FBFF = (16+16+12)*256 = 11264 bytes]
 ;
-; DIGIDREAM 2 aka SID VOICE EDITION
+; DIGIDREAM 2 aka DIGIDREAM SID VOICE EDITION
 ; [FRENCH TOUCH]
-; GROUiK/fenarinarsa
-; 04/2024
+; GROUiK
+; 05/2024
 ;
-; v0.17 - INT routine optimization (fixed volume issue -> thx to fenarinarsa!) / Add another effect part / fix Music data file issue
-; v0.16 - pages align + various optimizations 
-; v0.15 - IIc compatibility fixed (thx to fenarinarsa!)
-; v0.14 - IIc compatibility added (bugged for now!)
-; v0.13 - using VBL detection for Main_Loop + add specific code for IIc (commented for now)
-; v0.12 - use of double INT for open DGR "window" -> smaller white parts to mask swith between HGR/DGR / first move to IIc possible compatibility
-; v0.11 - hgr gfx modified / player improvement
-; v0.10 - various optimizations (again)
-; v0.09 - add full loop (track+effects)
-; v0.08 - various optimizations
-; v0.07 - first "finale" version
-; v0.06 - add color var for effect1 / various improvements (again)
-; v0.05 - Intro Effect added / various improvements / timeline added
-; v0.04 - Other DGR Effects added / Credits page displayed
-; v0.03 - DGR Effect added (some tests for now) / DGR "intro" screen (WIP)
-; v0.02 - DGR window "enough stable" added / some bugs fixed / some comments added/corrected
-; v0.01 - first commit (files mainly from first tests)
+; v0.8 - First public version
 ;
 !cpu 6502
 !convtab "a2txt.bin" ; 
@@ -806,7 +790,7 @@ mod_RTI         RTI                                 ; RTI/NOP ($40/$EA)
                 LDX valV
                 BEQ +                               ; if valv = 0 we don't change vol for next INT, just valEOR
                 STA valV                            ; because we don't want two consecutive values of "non-zero" vol 
-+               STA valEOR
++               STA valEOR                          ; [greetz to fenarinarsa to find and fix this bug!]
 
                 LDA saveA
             	LDX saveX
